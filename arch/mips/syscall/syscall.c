@@ -162,9 +162,9 @@ syscall(struct trapframe *tf)
                 break;
             
 	case SYS_remove:
-	      /* just ignore: do nothing */
-	        retval = 0;
-                break;
+		err = sys_remove((userptr_t)tf->tf_a0, &retval);
+		//err = 0; //be careful here TO DO
+	   	break;
 	
 	case SYS_fork:
 	        err = sys_fork(tf);

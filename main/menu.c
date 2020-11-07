@@ -43,7 +43,7 @@
 #include <test.h>
 #include "opt-sfs.h"
 #include "opt-net.h"
-
+#include "opt-shell.h"
 /*
  * In-kernel menu and command dispatcher.
  */
@@ -76,17 +76,22 @@ cmd_progthread(void *ptr, unsigned long nargs)
 	int result;
 
 	KASSERT(nargs >= 1);
-
+	#if !OPT_SHELL
 	if (nargs > 2) {
 		kprintf("Warning: argument passing from menu not supported\n");
 	}
+	#endif
 
 	/* Hope we fit. */
 	KASSERT(strlen(args[0]) < sizeof(progname));
 
 	strcpy(progname, args[0]);
 
+	#if OPT_SHELL
+	result = runprogram(progname,args,nargs);
+	#else
 	result = runprogram(progname);
+	#endif
 	if (result) {
 		kprintf("Running program %s failed: %s\n", args[0],
 			strerror(result));
@@ -125,6 +130,15 @@ common_prog(int nargs, char **args)
 			proc /* new process */,
 			cmd_progthread /* thread function */,
 			args /* thread arg */, nargs /* thread arg */);
+	#if OPT_SHELL
+	pid_t pid = proc->p_pid;
+	int exit_code;
+	pid_t pid_2 = sys_waitpid(pid,(userptr_t)&exit_code,0);
+	if(pid_2 != pid){
+		kprintf("Something goes wrong: pid returned != pid\n");
+		}
+	kprintf("Process returned = %d\n",exit_code);
+	#endif
 	if (result) {
 		kprintf("thread_fork failed: %s\n", strerror(result));
 		proc_destroy(proc);
