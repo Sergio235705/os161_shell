@@ -94,6 +94,7 @@ int sys__getcwd(char* buf, size_t buflen);
 int sys_execv(char *progname, char *args[]);
 int sys_lseek(int fd ,off_t offset, int start);
 int sys_dup2(int oldfd,int newfd);
+int sys_remove(userptr_t pathname, int32_t *retval);
 
 #endif
 #endif /* _SYSCALL_H_ */

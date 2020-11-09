@@ -135,6 +135,7 @@ file_write(int fd, userptr_t buf_ptr, size_t size)
   result = VOP_WRITE(vn, &ku);
   if (result)
   {
+    lock_release(TabFile.lk);
     return result;
   }
   kfree(kbuf);
@@ -162,13 +163,13 @@ int sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
   int fd, i, offset;
   struct vnode *v;
   struct openfile *of = NULL;
-  ;
   int result;
 
   result = vfs_open((char *)path, openflags, mode, &v);
   if (result)
   {
     *errp = ENOENT;
+    lock_release(TabFile.lk);
     return -1;
   }
   /* search system open file table */
@@ -226,6 +227,7 @@ int sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
         curproc->fileTable[fd].offset = offset; //offset;// caso append
         curproc->fileTable[fd].flags = openflags;
         curproc->fileTable[fd].fd = fd;
+        lock_release(TabFile.lk);
         return fd;
       }
     }
@@ -341,5 +343,23 @@ int sys_read(int fd, userptr_t buf_ptr, size_t size)
   }
 
   return (int)size;
+}
+
+int sys_remove(userptr_t pathname, int32_t *retval)
+{
+	char name[NAME_MAX+1];
+	size_t len;
+  //From user ptr to kernel space
+	if (copyinstr(pathname, name, NAME_MAX, &len) != 0) {
+		*retval = -1; //TO DO: error managment
+		return 1;
+	}
+
+	*retval = vfs_remove(name);
+	if (*retval < 0) {
+		*retval = -1;
+		return 1; //TO DO: error managment
+	}
+	return 0;
 }
 #endif
