@@ -28,8 +28,6 @@
 #if OPT_SHELL
 #include <kern/stat.h>
 
-//ciao sto facendo delle prove non mi odiate sto provando
-
 
 /* system open file table */
 
