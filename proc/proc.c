@@ -140,11 +140,14 @@ struct proc *kproc;
 static
 void 
 InitOpenFile(struct proc *proc)
-{   int i;
+{   int i,j;
     for(i=0;i<OPEN_MAX;i++)
 	{ 
 	    proc->fileTable[i].fd=-1;
 	    proc->fileTable[i].of=NULL;
+		proc->fileTable[i].offset=0;
+		for(j=0;j<OPEN_MAX/10;j++)
+		  proc->fileTable[i].dup[j]=-1;
 	}
 }
 #endif

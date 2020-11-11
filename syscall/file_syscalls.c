@@ -1,12 +1,4 @@
-/* * * * * * * * * * * * * * * *
-* Sys Call file for LAB2 PDS
-*
-*
-*
-*
-*
-*
-* * * * * * * * * * * * * * * */
+
 
 #include <types.h>
 #include <kern/unistd.h>
@@ -27,46 +19,17 @@
 
 #if OPT_SHELL
 #include <kern/stat.h>
+#include <kern/seek.h>
 
 
 /* system open file table */
 
 struct tableOpenFile TabFile;
 
-void openfileIncrRefCount(struct openfile *of)
-{
-  int i;
-  lock_acquire(TabFile.lk);
-  if (of != NULL)
-  {
-    for (i = 0; i < SYSTEM_OPEN_MAX; i++)
-    {
-      if (TabFile.systemFileTable[i].vn != NULL && TabFile.systemFileTable[i].vn == of->vn)
-      {
-        TabFile.systemFileTable[i].countRef++;
-      }
-    }
-  }
-  lock_release(TabFile.lk);
-}
 
-void openfileDecrRefCount(struct openfile *of)
-{
-  int i;
-  if (of != NULL)
-  {
-    for (i = 0; i < SYSTEM_OPEN_MAX; i++)
-    {
-      if (TabFile.systemFileTable[i].vn != NULL && TabFile.systemFileTable[i].vn == of->vn)
-      {
-        TabFile.systemFileTable[i].countRef--;
-      }
-    }
-  }
-}
 
 static int
-file_read(int fd, userptr_t buf_ptr, size_t size)
+file_read(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
 {
   lock_acquire(TabFile.lk);
   struct iovec iov;
@@ -78,23 +41,29 @@ file_read(int fd, userptr_t buf_ptr, size_t size)
   void *kbuf;
 
   if (fd < 0 || fd > OPEN_MAX)
-    return -1;
-  {
+     { lock_release(TabFile.lk);
+      *retval=-1;
+      return 1;}
+  
     of = curproc->fileTable[fd].of;
     offset = curproc->fileTable[fd].offset;
-  }
+  
   if (of == NULL)
-    return -1;
+    { lock_release(TabFile.lk);
+      *retval=-1;
+      return 1;}
   vn = of->vn;
   if (vn == NULL)
-    return -1;
+     { lock_release(TabFile.lk);
+      *retval=-1;
+      return 1;}
 
   kbuf = kmalloc(size);
   uio_kinit(&iov, &ku, kbuf, size, offset, UIO_READ);
-  result = VOP_READ(vn, &ku);
-  if (result)
-  {
-    return result;
+  *retval = VOP_READ(vn, &ku);
+  if (*retval)
+  { lock_release(TabFile.lk);
+    return *retval;
   }
   curproc->fileTable[fd].offset = ku.uio_offset;
   nread = size - ku.uio_resid;
@@ -105,30 +74,42 @@ file_read(int fd, userptr_t buf_ptr, size_t size)
 }
 
 static int
-file_write(int fd, userptr_t buf_ptr, size_t size)
+file_write(int fd, userptr_t buf_ptr, size_t size ,  int32_t *retval)
 {
   lock_acquire(TabFile.lk);
 
   struct iovec iov;
   struct uio ku;
   int offset;
+  struct stat *stats = NULL;
   int result, nwrite;
   struct vnode *vn;
   struct openfile *of;
   void *kbuf;
 
   if (fd < 0 || fd > OPEN_MAX)
-    return -1;
+     { lock_release(TabFile.lk);
+      *retval=-1;
+      return 1;}
+
+  of = curproc->fileTable[fd].of;
+  if (curproc->fileTable[fd].flags & O_APPEND)
   {
-    of = curproc->fileTable[fd].of;
-    offset = curproc->fileTable[fd].offset;
+    VOP_STAT(of->vn, stats);
+    offset = stats->st_size;
   }
+  else 
+   {offset = curproc->fileTable[fd].offset;}
+
   if (of == NULL)
-    return -1;
+     { lock_release(TabFile.lk);
+      *retval=-1;
+      return 1;}
   vn = of->vn;
   if (vn == NULL)
-    return -1;
-
+     { lock_release(TabFile.lk);
+      *retval=-1;
+      return 1;}
   kbuf = kmalloc(size);
   copyin(buf_ptr, kbuf, size);
   uio_kinit(&iov, &ku, kbuf, size, offset, UIO_WRITE);
@@ -145,7 +126,7 @@ file_write(int fd, userptr_t buf_ptr, size_t size)
   return (nwrite);
 }
 
-int sys__getcwd(char *buf, size_t buflen)
+int sys__getcwd(char *buf, size_t buflen,  int32_t *retval)
 {
   struct iovec iov;
   struct uio ku;
@@ -156,22 +137,24 @@ int sys__getcwd(char *buf, size_t buflen)
   return result;
 }
 
-int sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
+int sys_open(userptr_t path, int openflags, mode_t mode,  int32_t *retval)
 {
   lock_acquire(TabFile.lk);
 
-  int fd, i, offset;
+  int fd, i, offset = 0;
   struct vnode *v;
+  struct stat *stats = NULL;
   struct openfile *of = NULL;
   int result;
 
-  result = vfs_open((char *)path, openflags, mode, &v);
-  if (result)
+  *retval = vfs_open((char *)path, openflags, mode, &v);
+  if (*retval)
   {
-    *errp = ENOENT;
-    lock_release(TabFile.lk);
-    return -1;
-  }
+    *retval = ENOENT;
+      lock_release(TabFile.lk);
+  
+      return 1;}
+  
   /* search system open file table */
   for (i = 0; i < SYSTEM_OPEN_MAX; i++)
   {
@@ -180,20 +163,6 @@ int sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
     {
       of = &TabFile.systemFileTable[i];
       TabFile.systemFileTable[i].countRef++;
-      if (openflags & O_APPEND)
-      {
-        for (fd = STDERR_FILENO + 1; fd < OPEN_MAX; fd++)
-        {
-          if (curproc->fileTable[fd].of == of)
-          {
-            offset = curproc->fileTable[fd].offset;
-          }
-        }
-      }
-      else
-      {
-        offset = 0;
-      }
       break;
     }
   }
@@ -210,11 +179,21 @@ int sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
       }
     }
   }
+  if (openflags & O_APPEND)
+  {
+    VOP_STAT(of->vn, stats);
+    offset = stats->st_size;
+  }
+  else
+  {
+    offset = 0;
+  }
 
   if (of == NULL)
   {
     // no free slot in system open file table
-    *errp = ENFILE;
+    *retval = ENFILE;
+    
   }
   else
   {
@@ -224,34 +203,54 @@ int sys_open(userptr_t path, int openflags, mode_t mode, int *errp)
       {
 
         curproc->fileTable[fd].of = of;
-        curproc->fileTable[fd].offset = offset; //offset;// caso append
+        curproc->fileTable[fd].offset = offset;
         curproc->fileTable[fd].flags = openflags;
         curproc->fileTable[fd].fd = fd;
+        curproc->fileTable[fd].dup[0] = fd;
         lock_release(TabFile.lk);
         return fd;
       }
     }
     // no free slot in process open file table
-    *errp = EMFILE;
+    *retval = EMFILE;
   }
 
   vfs_close(v);
   lock_release(TabFile.lk);
-  return -1;
+  return 1;
 }
 
-int 
-sys_dup2(int oldfd, int newfd)
+int sys_dup2(int oldfd, int newfd ,  int32_t *retval)
 {
-  sys_close(newfd);
-  openfileIncrRefCount(curproc->fileTable[oldfd].of);
+  int i;
+  sys_close(newfd,0);
+  lock_acquire(TabFile.lk);
+  curproc->fileTable[oldfd].of->countRef++;
+  lock_release(TabFile.lk);
+  updateDup(oldfd, newfd);
   curproc->fileTable[newfd] = curproc->fileTable[oldfd];
-  /*cosa ritora questa funzione?*/
-  return 0;
+  for (i = 0; i < OPEN_MAX / 10; i++)
+  {
+    if (curproc->fileTable[oldfd].dup[i] != newfd && curproc->fileTable[oldfd].dup[i] != oldfd
+     && curproc->fileTable[oldfd].dup[i] != -1)
+      updateDup(curproc->fileTable[oldfd].dup[i], newfd);
+  }
+  
+  return newfd;
 }
 
-int 
-sys_close(int fd)
+void updateDup(int oldfd, int newfd)
+{
+  int i;
+  for (i = 0; i < OPEN_MAX / 10; i++)
+    if (curproc->fileTable[oldfd].dup[i] == -1)
+    {
+      curproc->fileTable[oldfd].dup[i] = newfd;
+      break;
+    }
+}
+
+int sys_close(int fd,  int32_t *retval)
 {
   lock_acquire(TabFile.lk);
 
@@ -259,30 +258,55 @@ sys_close(int fd)
   struct vnode *vn;
 
   if (fd < 0 || fd > OPEN_MAX)
-    return -1;
+     { lock_release(TabFile.lk);
+      *retval=-1;
+      return 1;}
   of = curproc->fileTable[fd].of;
   /*curproc->fileTable.fd?*/
   if (of == NULL || curproc->fileTable[fd].fd == -1)
-    return -1;
+       { lock_release(TabFile.lk);
+      *retval=-1;
+      return 1;}
   curproc->fileTable[fd].of = NULL;
   curproc->fileTable[fd].fd = -1;
 
-  openfileDecrRefCount(of);
+  of->countRef--;
   if (of->countRef > 0)
-    return 0; // just decrement ref cnt
+  {
+    lock_release(TabFile.lk);
+    return 0;
+  } // just decrement ref cnt
 
   vn = of->vn;
   of->vn = NULL;
+  of->offset = 0;
   if (vn == NULL)
-    return -1;
+    { lock_release(TabFile.lk);
+      *retval=-1;
+      return 1;}
 
   vfs_close(vn);
   lock_release(TabFile.lk);
   return 0;
 }
 
-int 
-sys_lseek(int fd, off_t offset, int start)
+int sys_lseek(int fd, off_t offset, int start,  int32_t *retval)
+{ lock_acquire(TabFile.lk);
+  int i, ret;
+  for (i = 0; i < OPEN_MAX / 10; i++)
+    if (curproc->fileTable[fd].dup[i] != -1)
+    {
+      ret = changeOffset(curproc->fileTable[fd].dup[i], offset, start);
+      if (ret == 1)
+         { *retval=EMFILE;
+          lock_release(TabFile.lk);
+           return 1;}
+    }
+    lock_release(TabFile.lk);
+  return 0;
+}
+
+int changeOffset(int fd, off_t offset, int start)
 {
   struct stat *stats = NULL;
   if (start & SEEK_SET)
@@ -301,20 +325,20 @@ sys_lseek(int fd, off_t offset, int start)
     curproc->fileTable[fd].offset = stats->st_size + offset;
     return 0;
   }
-  return -1;
+  return 1;
 }
 
 /*
  * simple file system calls for write/read
  */
-int sys_write(int fd, userptr_t buf_ptr, size_t size)
+int sys_write(int fd, userptr_t buf_ptr, size_t size,  int32_t *retval)
 {
   int i;
   char *p = (char *)buf_ptr;
 
   if (fd != STDOUT_FILENO && fd != STDERR_FILENO)
   {
-    return file_write(fd, buf_ptr, size);
+    return file_write(fd, buf_ptr, size , 0)
   }
 
   for (i = 0; i < (int)size; i++)
@@ -325,21 +349,22 @@ int sys_write(int fd, userptr_t buf_ptr, size_t size)
   return (int)size;
 }
 
-int sys_read(int fd, userptr_t buf_ptr, size_t size)
+int sys_read(int fd, userptr_t buf_ptr, size_t size ,  int32_t *retval)
 {
   int i;
   char *p = (char *)buf_ptr;
 
   if (fd != STDIN_FILENO)
   {
-    return file_read(fd, buf_ptr, size);
+    return file_read(fd, buf_ptr, size , 0)
   }
 
   for (i = 0; i < (int)size; i++)
   {
     p[i] = getch();
     if (p[i] < 0)
-      return i;
+      {*retval=i;
+      return i;}
   }
 
   return (int)size;
@@ -347,19 +372,21 @@ int sys_read(int fd, userptr_t buf_ptr, size_t size)
 
 int sys_remove(userptr_t pathname, int32_t *retval)
 {
-	char name[NAME_MAX+1];
-	size_t len;
+  char name[NAME_MAX + 1];
+  size_t len;
   //From user ptr to kernel space
-	if (copyinstr(pathname, name, NAME_MAX, &len) != 0) {
-		*retval = -1; //TO DO: error managment
-		return 1;
-	}
+  if (copyinstr(pathname, name, NAME_MAX, &len) != 0)
+  {
+    *retval = -1; //TO DO: error managment
+    return 1;
+  }
 
-	*retval = vfs_remove(name);
-	if (*retval < 0) {
-		*retval = -1;
-		return 1; //TO DO: error managment
-	}
-	return 0;
+  *retval = vfs_remove(name);
+  if (*retval < 0)
+  {
+    *retval = -1;
+    return 1; //TO DO: error managment
+  }
+  return 0;
 }
 #endif
