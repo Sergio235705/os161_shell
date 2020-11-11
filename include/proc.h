@@ -67,6 +67,7 @@ struct fileTableEntry
   off_t offset;
   int flags;
   int fd;
+  int dup[OPEN_MAX/10];
 
 };
 #endif
