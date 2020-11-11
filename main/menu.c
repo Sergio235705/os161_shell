@@ -133,7 +133,7 @@ common_prog(int nargs, char **args)
 	#if OPT_SHELL
 	pid_t pid = proc->p_pid;
 	int exit_code;
-	pid_t pid_2 = sys_waitpid(pid,(userptr_t)&exit_code,0);
+	pid_t pid_2 = sys_waitpid(pid,(userptr_t)&exit_code,0,0);
 	if(pid_2 != pid){
 		kprintf("Something goes wrong: pid returned != pid\n");
 		}
