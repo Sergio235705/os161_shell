@@ -43,7 +43,7 @@ file_read(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
   if (fd < 0 || fd > OPEN_MAX)
      { lock_release(TabFile.lk);
       *retval=-1;
-      return 1;}
+      return 1;} // Ritornare errore specifico 
   
     of = curproc->fileTable[fd].of;
     offset = curproc->fileTable[fd].offset;
@@ -51,26 +51,27 @@ file_read(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
   if (of == NULL)
     { lock_release(TabFile.lk);
       *retval=-1;
-      return 1;}
+      return 1;} // Ritornare errore specifico 
   vn = of->vn;
   if (vn == NULL)
      { lock_release(TabFile.lk);
       *retval=-1;
-      return 1;}
+      return 1;} // Ritornare errore specifico 
 
   kbuf = kmalloc(size);
   uio_kinit(&iov, &ku, kbuf, size, offset, UIO_READ);
   *retval = VOP_READ(vn, &ku);
   if (*retval)
   { lock_release(TabFile.lk);
-    return *retval;
-  }
+     *retval=-1;
+      return 1;} // Ritornare errore specifico 
   curproc->fileTable[fd].offset = ku.uio_offset;
   nread = size - ku.uio_resid;
   copyout(kbuf, buf_ptr, nread);
   kfree(kbuf);
   lock_release(TabFile.lk);
-  return (nread);
+  *retval=nread;
+  return 0;
 }
 
 static int
@@ -90,7 +91,7 @@ file_write(int fd, userptr_t buf_ptr, size_t size ,  int32_t *retval)
   if (fd < 0 || fd > OPEN_MAX)
      { lock_release(TabFile.lk);
       *retval=-1;
-      return 1;}
+      return 1;} // Ritornare errore specifico 
 
   of = curproc->fileTable[fd].of;
   if (curproc->fileTable[fd].flags & O_APPEND)
@@ -104,12 +105,12 @@ file_write(int fd, userptr_t buf_ptr, size_t size ,  int32_t *retval)
   if (of == NULL)
      { lock_release(TabFile.lk);
       *retval=-1;
-      return 1;}
+      return 1;} // Ritornare errore specifico 
   vn = of->vn;
   if (vn == NULL)
      { lock_release(TabFile.lk);
       *retval=-1;
-      return 1;}
+      return 1;} // Ritornare errore specifico 
   kbuf = kmalloc(size);
   copyin(buf_ptr, kbuf, size);
   uio_kinit(&iov, &ku, kbuf, size, offset, UIO_WRITE);
@@ -117,13 +118,14 @@ file_write(int fd, userptr_t buf_ptr, size_t size ,  int32_t *retval)
   if (result)
   {
     lock_release(TabFile.lk);
-    return result;
-  }
+    *retval=-1;
+      return 1;} // Ritornare errore specifico
   kfree(kbuf);
   curproc->fileTable[fd].offset = ku.uio_offset;
   nwrite = size - ku.uio_resid;
   lock_release(TabFile.lk);
-  return (nwrite);
+  *retval=nwrite;
+  return 0;
 }
 
 int sys__getcwd(char *buf, size_t buflen,  int32_t *retval)
@@ -134,7 +136,7 @@ int sys__getcwd(char *buf, size_t buflen,  int32_t *retval)
 
   uio_kinit(&iov, &ku, buf, buflen, 0, UIO_READ);
   *retval = vfs_getcwd(&ku);
-  return *retval;
+  return 0;
 }
 
 int sys_open(userptr_t path, int openflags, mode_t mode,  int32_t *retval)
@@ -150,10 +152,9 @@ int sys_open(userptr_t path, int openflags, mode_t mode,  int32_t *retval)
   *retval = vfs_open((char *)path, openflags, mode, &v);
   if (*retval)
   {
-    *retval = ENOENT;
+    *retval = -1;
       lock_release(TabFile.lk);
-  
-      return 1;}
+      return ENOENT;} 
   
   /* search system open file table */
   for (i = 0; i < SYSTEM_OPEN_MAX; i++)
@@ -208,7 +209,8 @@ int sys_open(userptr_t path, int openflags, mode_t mode,  int32_t *retval)
         curproc->fileTable[fd].fd = fd;
         curproc->fileTable[fd].dup[0] = fd;
         lock_release(TabFile.lk);
-        return fd;
+        *retval=fd;
+        return 0;
       }
     }
     // no free slot in process open file table
@@ -217,7 +219,7 @@ int sys_open(userptr_t path, int openflags, mode_t mode,  int32_t *retval)
 
   vfs_close(v);
   lock_release(TabFile.lk);
-  return 1;
+  return 1; //Errore specifico (?)
 }
 
 int sys_dup2(int oldfd, int newfd ,  int32_t *retval)
@@ -236,8 +238,8 @@ int sys_dup2(int oldfd, int newfd ,  int32_t *retval)
      && curproc->fileTable[oldfd].dup[i] != -1)
       updateDup(curproc->fileTable[oldfd].dup[i], newfd);
   }
-  *retval=0;
-  return newfd;
+  *retval=newfd;
+  return 0;
 }
 
 void updateDup(int oldfd, int newfd)
@@ -261,13 +263,13 @@ int sys_close(int fd,  int32_t *retval)
   if (fd < 0 || fd > OPEN_MAX)
      { lock_release(TabFile.lk);
       *retval=-1;
-      return 1;}
+      return 1;} // Errore specifico
   of = curproc->fileTable[fd].of;
   /*curproc->fileTable.fd?*/
   if (of == NULL || curproc->fileTable[fd].fd == -1)
        { lock_release(TabFile.lk);
       *retval=-1;
-      return 1;}
+      return 1;} // Errore specifico
   curproc->fileTable[fd].of = NULL;
   curproc->fileTable[fd].fd = -1;
 
@@ -275,6 +277,7 @@ int sys_close(int fd,  int32_t *retval)
   if (of->countRef > 0)
   {
     lock_release(TabFile.lk);
+    *retval=0;
     return 0;
   } // just decrement ref cnt
 
@@ -284,9 +287,10 @@ int sys_close(int fd,  int32_t *retval)
   if (vn == NULL)
     { lock_release(TabFile.lk);
       *retval=-1;
-      return 1;}
+      return 1;} // Errore specifico 
 
   vfs_close(vn);
+  *retval=0;
   lock_release(TabFile.lk);
   return 0;
 }
@@ -299,11 +303,13 @@ int sys_lseek(int fd, off_t offset, int start,  int32_t *retval)
     {
       ret = changeOffset(curproc->fileTable[fd].dup[i], offset, start);
       if (ret == 1)
-         { *retval=EMFILE;
+         {
           lock_release(TabFile.lk);
-           return 1;}
+           *retval=-1;
+           return EMFILE;}  //Errore specifio (?)
     }
     lock_release(TabFile.lk);
+    *retval=0;
   return 0;
 }
 
@@ -346,8 +352,8 @@ int sys_write(int fd, userptr_t buf_ptr, size_t size,  int32_t *retval)
   {
     putch(p[i]);
   }
-
-  return (int)size;
+  *retval=(int)size;
+  return 0;
 }
 
 int sys_read(int fd, userptr_t buf_ptr, size_t size ,  int32_t *retval)
@@ -368,7 +374,8 @@ int sys_read(int fd, userptr_t buf_ptr, size_t size ,  int32_t *retval)
       return i;}
   }
 
-  return (int)size;
+   *retval=(int)size;
+  return 0;
 }
 
 int sys_remove(userptr_t pathname, int32_t *retval)
