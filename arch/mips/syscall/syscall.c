@@ -116,7 +116,7 @@ syscall(struct trapframe *tf)
 	case SYS_write:
 	        err = sys_write((int)tf->tf_a0,
 				(userptr_t)tf->tf_a1,
-				(size_t)tf->tf_a2 ,(int32_t*) retval);
+				(size_t)tf->tf_a2 , &retval);
 		/* error: function not implemented */
                 if (err<0) err = ENOSYS; 
 		else err = 0;
@@ -125,20 +125,20 @@ syscall(struct trapframe *tf)
 	case SYS_read:
 	        err = sys_read((int)tf->tf_a0,
 				(userptr_t)tf->tf_a1,
-				(size_t)tf->tf_a2 , (int32_t*) retval);
+				(size_t)tf->tf_a2 , &retval);
                 if (err<0) err = ENOSYS; 
 		else err = 0;
                 break;
 
 	case SYS__exit:
 	        /* TODO: just avoid crash */
- 	        sys__exit((int)tf->tf_a0, (int32_t*) retval);
+ 	        sys__exit((int)tf->tf_a0);
                 break;
 
 	case SYS_waitpid:
 	        err = sys_waitpid((pid_t)tf->tf_a0,
 				(userptr_t)tf->tf_a1,
-				(int)tf->tf_a2 , (int32_t*) retval);
+				(int)tf->tf_a2 , &retval);
                 if (err<0) err = ENOSYS; 
 		else err = 0;
                 break;
@@ -152,47 +152,46 @@ syscall(struct trapframe *tf)
 	case SYS_open:
 	        err = sys_open((userptr_t)tf->tf_a0,
 				  (int)tf->tf_a1,
-				  (mode_t)tf->tf_a2, (int32_t*) retval);
-		if (err<0) err = ENOENT; else err = 0;
+				  (mode_t)tf->tf_a2, &retval);
                 break;
 
 	case SYS_close:
-	        err = sys_close((int)tf->tf_a0,(int32_t*) retval);
+	        err = sys_close((int)tf->tf_a0, &retval);
 		if (err<0) err = ENOENT; else err = 0;
                 break;
             
 	case SYS_remove:
-		err = sys_remove((userptr_t)tf->tf_a0,(int32_t*) retval);
+		err = sys_remove((userptr_t)tf->tf_a0, &retval);
 		//err = 0; //be careful here TO DO
 	   	break;
 	
 	case SYS_fork:
-	        err = sys_fork(tf,(int32_t*) retval);
+	        err = sys_fork(tf, &retval);
  		if (err<0) err = ENOSYS; 
 		else err = 0;
                 break;
 	
 	case SYS_execv:
 	        err = sys_execv((char*)tf->tf_a0,
-				  (char**)tf->tf_a1,(int32_t*) retval);
+				  (char**)tf->tf_a1, &retval);
  		if (err<0) err = ENOSYS; 
 		else err = 0;
                 break;
 
 	case SYS___getcwd:
-		err = sys__getcwd((char*)tf->tf_a0, (size_t)tf->tf_a1,(int32_t*)retval);
+		err = sys__getcwd((char*)tf->tf_a0, (size_t)tf->tf_a1, &retval);
 		if (err<0) err = ENOENT; else err = 0;
 		
 		break;
 
 	case SYS_dup2:
-		err = sys_dup2((int)tf->tf_a0, (int)tf->tf_a1,(int32_t*) retval);
+		err = sys_dup2((int)tf->tf_a0, (int)tf->tf_a1, &retval);
 		if (err<0) err = ENOENT; else err = 0;
 
 		break;
 
 	case SYS_lseek:
-		err = sys_lseek((int)tf->tf_a0, (off_t)tf->tf_a1, (int)tf->tf_a2, (int32_t*) retval);
+		err = sys_lseek((int)tf->tf_a0, (off_t)tf->tf_a1, (int)tf->tf_a2, &retval);
 		if (err<0) err = ENOENT; else err = 0;
 
 		break;

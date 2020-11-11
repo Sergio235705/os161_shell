@@ -141,19 +141,19 @@ int sys_open(userptr_t path, int openflags, mode_t mode,  int32_t *retval)
 {
   lock_acquire(TabFile.lk);
 
-  int fd, i, offset = 0;
+  int result, fd, i, offset = 0;
   struct vnode *v;
   struct stat *stats = NULL;
   struct openfile *of = NULL;
   
 
-  *retval = vfs_open((char *)path, openflags, mode, &v);
-  if (*retval)
+  result = vfs_open((char *)path, openflags, mode, &v);
+
+  if (result)
   {
-    *retval = ENOENT;
-      lock_release(TabFile.lk);
-  
-      return 1;}
+    lock_release(TabFile.lk);
+    return result;
+  }
   
   /* search system open file table */
   for (i = 0; i < SYSTEM_OPEN_MAX; i++)
@@ -166,6 +166,7 @@ int sys_open(userptr_t path, int openflags, mode_t mode,  int32_t *retval)
       break;
     }
   }
+  
   if (of == NULL)
   {
     for (i = 0; i < SYSTEM_OPEN_MAX; i++)
@@ -192,8 +193,7 @@ int sys_open(userptr_t path, int openflags, mode_t mode,  int32_t *retval)
   if (of == NULL)
   {
     // no free slot in system open file table
-    *retval = ENFILE;
-    
+    return ENFILE;
   }
   else
   {
@@ -201,23 +201,23 @@ int sys_open(userptr_t path, int openflags, mode_t mode,  int32_t *retval)
     {
       if (curproc->fileTable[fd].fd == -1)
       {
-
         curproc->fileTable[fd].of = of;
         curproc->fileTable[fd].offset = offset;
         curproc->fileTable[fd].flags = openflags;
         curproc->fileTable[fd].fd = fd;
         curproc->fileTable[fd].dup[0] = fd;
+        *retval = fd;
         lock_release(TabFile.lk);
-        return fd;
+        return 0;
       }
     }
     // no free slot in process open file table
-    *retval = EMFILE;
+    return EMFILE;
   }
 
   vfs_close(v);
   lock_release(TabFile.lk);
-  return 1;
+  return 0;
 }
 
 int sys_dup2(int oldfd, int newfd ,  int32_t *retval)
