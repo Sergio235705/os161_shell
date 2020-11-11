@@ -30,8 +30,9 @@
 
 void
 sys__exit(int status , int32_t *retval)
-{
+{ 
   struct proc *p = curproc;
+  *retval=status & 0xff;
   p->p_status = status & 0xff; /* just lower 8 bits returned */
   proc_remthread(curthread);
   V(p->p_sem);
@@ -120,7 +121,7 @@ pid_t sys_fork(struct trapframe *ctf , int32_t *retval){
 }
 
 
-int sys_execv(char *progname, char *args[],, int32_t *retval)
+int sys_execv(char *progname, char *args[], int32_t *retval)
 {
 	struct addrspace *as;
 	struct vnode *v;

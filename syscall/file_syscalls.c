@@ -35,7 +35,7 @@ file_read(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
   struct iovec iov;
   struct uio ku;
   int offset;
-  int result, nread;
+  int  nread;
   struct vnode *vn;
   struct openfile *of;
   void *kbuf;
@@ -130,11 +130,11 @@ int sys__getcwd(char *buf, size_t buflen,  int32_t *retval)
 {
   struct iovec iov;
   struct uio ku;
-  int result;
+  
 
   uio_kinit(&iov, &ku, buf, buflen, 0, UIO_READ);
-  result = vfs_getcwd(&ku);
-  return result;
+  *retval = vfs_getcwd(&ku);
+  return *retval;
 }
 
 int sys_open(userptr_t path, int openflags, mode_t mode,  int32_t *retval)
@@ -145,7 +145,7 @@ int sys_open(userptr_t path, int openflags, mode_t mode,  int32_t *retval)
   struct vnode *v;
   struct stat *stats = NULL;
   struct openfile *of = NULL;
-  int result;
+  
 
   *retval = vfs_open((char *)path, openflags, mode, &v);
   if (*retval)
@@ -223,6 +223,7 @@ int sys_open(userptr_t path, int openflags, mode_t mode,  int32_t *retval)
 int sys_dup2(int oldfd, int newfd ,  int32_t *retval)
 {
   int i;
+  
   sys_close(newfd,0);
   lock_acquire(TabFile.lk);
   curproc->fileTable[oldfd].of->countRef++;
@@ -235,7 +236,7 @@ int sys_dup2(int oldfd, int newfd ,  int32_t *retval)
      && curproc->fileTable[oldfd].dup[i] != -1)
       updateDup(curproc->fileTable[oldfd].dup[i], newfd);
   }
-  
+  *retval=0;
   return newfd;
 }
 
@@ -338,7 +339,7 @@ int sys_write(int fd, userptr_t buf_ptr, size_t size,  int32_t *retval)
 
   if (fd != STDOUT_FILENO && fd != STDERR_FILENO)
   {
-    return file_write(fd, buf_ptr, size , 0)
+    return file_write(fd, buf_ptr, size , retval);
   }
 
   for (i = 0; i < (int)size; i++)
@@ -356,7 +357,7 @@ int sys_read(int fd, userptr_t buf_ptr, size_t size ,  int32_t *retval)
 
   if (fd != STDIN_FILENO)
   {
-    return file_read(fd, buf_ptr, size , 0)
+    return file_read(fd, buf_ptr, size , retval);
   }
 
   for (i = 0; i < (int)size; i++)
