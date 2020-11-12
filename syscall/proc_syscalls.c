@@ -51,7 +51,7 @@ sys_waitpid(pid_t pid, userptr_t statusp, int options , int32_t *retval)
   (void)options; /* not handled */
   if (p==NULL) {
 	  *retval=-1;
-	  return -1;}
+	  return -1;} // Errore specifico S
   s = proc_wait(p);
   if (statusp!=NULL) 
     *(int*)statusp = s;
