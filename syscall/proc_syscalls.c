@@ -29,10 +29,9 @@
 #if OPT_SHELL
 
 void
-sys__exit(int status , int32_t *retval)
+sys__exit(int status)
 { 
   struct proc *p = curproc;
-  *retval=status & 0xff;
   p->p_status = status & 0xff; /* just lower 8 bits returned */
   proc_remthread(curthread);
   V(p->p_sem);
