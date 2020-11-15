@@ -42,7 +42,7 @@
 struct openfile
 {
   struct vnode *vn;
-  off_t offset;
+  //off_t offset;
   unsigned int countRef;
 };
 

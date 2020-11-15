@@ -67,7 +67,8 @@ struct fileTableEntry
   off_t offset;
   int flags;
   int fd;
-  int dup[OPEN_MAX/10];
+  int dupCnt;
+  int dup[OPEN_MAX]; //contiene 1 se l'indice nella fileTable ha questa Entry
 
 };
 #endif
@@ -88,7 +89,7 @@ struct proc {
 	int p_status;                   /* status as obtained by exit() */
     pid_t p_pid;                    /* process pid */
 	struct semaphore *p_sem;
-	struct fileTableEntry fileTable[OPEN_MAX];
+	struct fileTableEntry *fileTable[OPEN_MAX];
 #endif
 
 };
