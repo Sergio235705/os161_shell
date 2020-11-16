@@ -85,7 +85,7 @@ struct proc {
 
 #if OPT_SHELL
 	int p_status;                   /* status as obtained by exit() */
-    pid_t p_pid;                    /* process pid */
+        pid_t p_pid;                    /* process pid */
 	struct semaphore *p_sem;
 	struct fileTableEntry fileTable[OPEN_MAX];
 #endif
@@ -118,9 +118,9 @@ struct addrspace *proc_setas(struct addrspace *);
 
 #if OPT_SHELL
 
-int proc_wait(struct proc *proc);
-struct proc *proc_search_pid(pid_t pid);
-void proc_file_table_copy(struct proc *psrc, struct proc *pdest);
+	int proc_wait(struct proc *proc);
+	struct proc *proc_search_pid(pid_t pid);
+	void proc_file_table_copy(struct proc *psrc, struct proc *pdest);
 
 #endif
 
