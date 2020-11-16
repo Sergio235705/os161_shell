@@ -30,7 +30,7 @@
 
 void
 sys__exit(int status)
-{
+{ 
   struct proc *p = curproc;
   p->p_status = status & 0xff; /* just lower 8 bits returned */
   proc_remthread(curthread);
@@ -44,12 +44,14 @@ sys__exit(int status)
 
 
 int
-sys_waitpid(pid_t pid, userptr_t statusp, int options)
+sys_waitpid(pid_t pid, userptr_t statusp, int options , int32_t *retval)
 {
   struct proc *p = proc_search_pid(pid);
   int s;
   (void)options; /* not handled */
-  if (p==NULL) return -1;
+  if (p==NULL) {
+	  *retval=-1;
+	  return -1;}
   s = proc_wait(p);
   if (statusp!=NULL) 
     *(int*)statusp = s;
@@ -72,7 +74,7 @@ call_enter_forked_process(void *tfv, unsigned long dummy) {
   panic("enter_forked_process returned (should not happen)\n");
 }
 
-pid_t sys_fork(struct trapframe *ctf) {
+pid_t sys_fork(struct trapframe *ctf , int32_t *retval){
   struct trapframe *tf_child;
   struct proc *newp;
   int result;
@@ -81,18 +83,21 @@ pid_t sys_fork(struct trapframe *ctf) {
 
   newp = proc_create_runprogram(curproc->p_name);
   if (newp == NULL) {
-    return ENOMEM;
-  }
+
+	    *retval=ENOMEM;
+	  return -1;}
+   
+  
   as_copy(curproc->p_addrspace, &(newp->p_addrspace));
   if(newp->p_addrspace == NULL){
     proc_destroy(newp); 
-    return ENOMEM; 
-  }
+      *retval=ENOMEM;
+	  return -1;}
   tf_child = kmalloc(sizeof(struct trapframe));
   if(tf_child == NULL){
     proc_destroy(newp);
-    return ENOMEM; 
-  }
+       *retval=ENOMEM;
+	  return -1;}
   memcpy(tf_child, ctf, sizeof(struct trapframe));
 
   /* TO BE DONE: linking parent/child, so that child terminated 
@@ -106,8 +111,8 @@ pid_t sys_fork(struct trapframe *ctf) {
   if (result){
     proc_destroy(newp);
     kfree(tf_child);
-    return ENOMEM;
-  }
+       *retval=ENOMEM;
+	  return -1;}
 
  
 
@@ -115,7 +120,8 @@ pid_t sys_fork(struct trapframe *ctf) {
 }
 
 
-int sys_execv(char *progname, char *args[]){
+int sys_execv(char *progname, char *args[], int32_t *retval)
+{
 	struct addrspace *as;
 	struct vnode *v;
 	vaddr_t entrypoint, stackptr;
@@ -125,9 +131,8 @@ int sys_execv(char *progname, char *args[]){
 	struct addrspace * old_as;
 	char** argv = (char **) kmalloc(sizeof (args) * sizeof (char *));
 	if (!argv) {
-	   return -1;
-	}
-
+	     *retval=-1;
+	  return -1;}
 	// looping through the arguments to copy into the new array.
 	for (i = 0;args[i] != NULL; i++) {
 
@@ -158,8 +163,8 @@ int sys_execv(char *progname, char *args[]){
 	as = as_create();
 	if (as == NULL) {
 		vfs_close(v);
-		return ENOMEM;
-	}
+		   *retval=ENOMEM;
+	  return -1;}
 
 	/* Switch to it and activate it. */
 	proc_setas(as);
@@ -170,9 +175,8 @@ int sys_execv(char *progname, char *args[]){
 	if (result) {
 		/* p_addrspace will go away when curproc is destroyed */
 		vfs_close(v);
-		return result;
-	}
-
+		   *retval=result;
+	  return -1;}
 	/* Done with the file now. */
 	vfs_close(v);
 
@@ -180,8 +184,8 @@ int sys_execv(char *progname, char *args[]){
 	result = as_define_stack(as, &stackptr);
 	if (result) {
 		/* p_addrspace will go away when curproc is destroyed */
-		return result;
-	}
+		   *retval=result;
+	  return -1;}
 	as_destroy(old_as);
 	
 
@@ -198,8 +202,8 @@ int sys_execv(char *progname, char *args[]){
 	result = copyoutstr(argv[i], (userptr_t) stackptr, len, &actual);
 	if(result != 0){
 	    kprintf("copyoutstr failed: %s\n", strerror(result));
-	    return result;
-	}
+	     *retval=result;
+	  return -1;}
 	kfree(argv[i]);
 	// save the stack address of the arguments in the original order.
 	topstack[argc - i - 1] = stackptr;
@@ -211,17 +215,16 @@ int sys_execv(char *progname, char *args[]){
 	copyoutstr(NULL, (userptr_t) stackptr, 4, &actual);
 	if(result != 0){
 	    kprintf("copyoutstr failed: %s\n", strerror(result));
-	    return result;
-	}
-
+	     *retval=result;
+	  return -1;}
 	// writing the addresses of the arguments in the stack, into the stack.
 	for (i = 0; i < argc; i++) {
 	stackptr -= 4;
 	result = copyout(&topstack[i], (userptr_t) stackptr, sizeof (topstack[i]));
 	if(result != 0){
 	    kprintf("copyout failed: %s\n", strerror(result));
-	    return result;
-	}
+	     *retval=result;
+	  return -1;}
 	}
 			
 
@@ -229,6 +232,7 @@ int sys_execv(char *progname, char *args[]){
 	enter_new_process(argc /*argc*/, (userptr_t) stackptr/*userspace addr of argv*/,
 			  NULL /*userspace addr of environment*/,
 			  stackptr, entrypoint);
+
 
 	/* enter_new_process does not return. */
 	panic("enter_new_process returned\n");
@@ -243,4 +247,3 @@ int sys_execv(char *progname, char *args[]){
 
 
 #endif
-

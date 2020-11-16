@@ -3,6 +3,12 @@
         "autoconf.h": "c",
         "lib.h": "c",
         "opt-noasserts.h": "c",
-        "version.h": "c"
+        "version.h": "c",
+        "cctype": "c",
+        "climits": "c",
+        "cstdarg": "c",
+        "cstdlib": "c",
+        "limits": "c",
+        "cstdint": "c"
     }
 }
