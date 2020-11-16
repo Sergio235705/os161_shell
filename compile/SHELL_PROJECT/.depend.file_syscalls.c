@@ -13,5 +13,4 @@ file_syscalls.o: ../../syscall/file_syscalls.c ../../include/types.h \
  ../../include/vnode.h ../../include/vfs.h ../../include/synch.h \
  ../../include/uio.h ../../include/kern/iovec.h ../../include/proc.h \
  /home/pds/os161/os161-base-2.0.2/kern/compile/SHELL_PROJECT/opt-shell.h \
- ../../include/kern/fcntl.h ../../include/kern/stat.h \
- ../../include/kern/seek.h
+ ../../include/kern/fcntl.h ../../include/kern/stat.h

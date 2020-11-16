@@ -57,8 +57,6 @@
 #include <synch.h>
 #define MAX_PROC 100
 
-extern struct tableOpenFile TabFile;
-
 static struct _processTable {
   int active;           /* initial value 0 */
   struct proc *proc[MAX_PROC+1]; /* [0] not used. pids are >= 1 */
@@ -143,7 +141,7 @@ InitOpenFile(struct proc *proc)
 {   int i;
     for(i=0;i<OPEN_MAX;i++)
 	{ 
-	    proc->fileTable[i].fd=-1;
+		proc->fileTable[i].fd=-1;
 	    proc->fileTable[i].of=NULL;
 	}
 }
@@ -287,7 +285,6 @@ proc_bootstrap(void)
 		panic("proc_create for kproc failed\n");
 	}
 	#if OPT_SHELL
-	TabFile.lk = lock_create("Tab");
 	spinlock_init(&processTable.lk);
 	/* kernel process is not registered in the table */
 	processTable.active = 1;
