@@ -46,22 +46,13 @@ sys__exit(int status)
 int
 sys_waitpid(pid_t pid, userptr_t statusp, int options)
 {
-	struct proc *p = proc_search_pid(pid);
-	int s,s1;
-	(void)options; /* not handled */
-	if (p==NULL) return -1;
-	s = proc_wait(p);
-	
-	if (statusp!=NULL)
-	{
-		
-		if(copyout(&s, (userptr_t) statusp, sizeof(int)))
-			kprintf("bruh...\n");
-		if(copyin((userptr_t) statusp,&s1, sizeof(int)))
-			kprintf("bruh...2\n");
-
-	//memcpy(ret, &pid, sizeof(int));
-	}
+  struct proc *p = proc_search_pid(pid);
+  int s;
+  (void)options; /* not handled */
+  if (p==NULL) return -1;
+  s = proc_wait(p);
+  if (statusp!=NULL) 
+    *(int*)statusp = s;
   return pid;
 }
 
@@ -132,21 +123,6 @@ int sys_execv(char *progname, char *args[]){
 	int argc=0;
 	int i = 0,len,j;
 	struct addrspace * old_as;
-	size_t size =0;
-	int end = 0;
-	char path_name[NAME_MAX+1];
-	char garbage[NAME_MAX+1];
-	/*if(progname == NULL)
-		return EFAULT;*/
-	/*
-     * We don't believe in user supplied pointer for the path. Using 
-     * copyinstr to check the validity and securely copy the progname from
-     *  userspace into kernel space
-     */
-	result = copyinstr((userptr_t)progname, path_name, NAME_MAX, &size);
-	if(result)
-		return result;	
-
 	char** argv = (char **) kmalloc(sizeof (args) * sizeof (char *));
 	if (!argv) {
 	   return -1;
@@ -179,7 +155,7 @@ int sys_execv(char *progname, char *args[]){
 	}
 		
 	// looping through the arguments to copy into the new array.
-	for (i = 0; i < argc; i++) {
+	for (i = 0;args[i] != NULL; i++) {
 
 	len = strlen(args[i]) + 4 - (strlen(args[i]) % 4);
 	argv[i] = (char *) kmalloc(len);
@@ -194,7 +170,7 @@ int sys_execv(char *progname, char *args[]){
 	memcpy(argv[i], args[i], strlen(args[i]));
 	}
 
-
+	argc = i;
 
 	/* Open the file. */
 	result = vfs_open(progname, O_RDONLY, 0, &v);
@@ -218,7 +194,6 @@ int sys_execv(char *progname, char *args[]){
 	/* Load the executable. */
 	result = load_elf(v, &entrypoint);
 	if (result) {
-		proc_setas(old_as);
 		/* p_addrspace will go away when curproc is destroyed */
 		vfs_close(v);
 		return result;
@@ -284,7 +259,7 @@ int sys_execv(char *progname, char *args[]){
 	/* enter_new_process does not return. */
 	panic("enter_new_process returned\n");
 	return EINVAL;
-	}
+}
 
 
 

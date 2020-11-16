@@ -167,7 +167,7 @@ syscall(struct trapframe *tf)
 	   	break;
 	
 	case SYS_fork:
-	        retval = sys_fork(tf);
+	        err = sys_fork(tf);
  		if (retval<0) err = ENOSYS; 
 		else err = 0;
                 break;
@@ -175,6 +175,8 @@ syscall(struct trapframe *tf)
 	case SYS_execv:
 	        err = sys_execv((char*)tf->tf_a0,
 				  (char**)tf->tf_a1);
+ 		if (retval<0) err = ENOSYS; 
+		else err = 0;
                 break;
 
 	case SYS___getcwd:
