@@ -136,7 +136,6 @@ mips_trap(struct trapframe *tf)
 	/*
 	 * Extract the exception code info from the register fields.
 	 */
-
 	code = (tf->tf_cause & CCA_CODE) >> CCA_CODESHIFT;
 	/*isutlb = (tf->tf_cause & CCA_UTLB) != 0;*/
 	iskern = (tf->tf_status & CST_KUp) == 0;
