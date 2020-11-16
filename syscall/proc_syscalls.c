@@ -154,6 +154,7 @@ int sys_execv(char *progname, char *args[]){
 	/*if (args == NULL)
 		argc = 0;
 	else*/
+	//Riga aggiunta per committare
 	i = 0;
 	{
 		result = copyinstr((userptr_t)args, garbage, NAME_MAX, &size);
