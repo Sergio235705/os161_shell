@@ -219,6 +219,7 @@ int sys_open(userptr_t path, int openflags, mode_t mode, int32_t *retval)
         curproc->fileTable[fd]->offset = offset;
         curproc->fileTable[fd]->flags = openflags;
         curproc->fileTable[fd]->fd = fd;
+        curproc->fileTable[fd]->dupCnt = 0;
         curproc->fileTable[fd]->dup[curproc->fileTable[fd]->dupCnt++] = fd;
         *retval = fd;
         lock_release(TabFile.lk);
@@ -236,41 +237,22 @@ int sys_open(userptr_t path, int openflags, mode_t mode, int32_t *retval)
 
 int sys_dup2(int oldfd, int newfd, int32_t *retval)
 {
-  //int i;
   struct fileTableEntry *fte = NULL;
-  //sys_close(newfd, 0);
-  //lock_acquire(TabFile.lk);
-  //curproc->fileTable[oldfd].of->countRef++;
-  //lock_release(TabFile.lk);
-  //updateDup(oldfd, newfd);
-  //curproc->fileTable[newfd] = curproc->fileTable[oldfd];
-  /*for (i = 0; i < OPEN_MAX / 10; i++)
+  if(curproc->fileTable[newfd] != NULL && newfd != 0 && newfd != 1 && newfd != 2)
   {
-    if (curproc->fileTable[oldfd].dup[i] != newfd && curproc->fileTable[oldfd].dup[i] != oldfd && curproc->fileTable[oldfd].dup[i] != -1)
-    {
-      updateDup(curproc->fileTable[oldfd].dup[i], newfd);
-    }
-  }*/
-  //struct fileTableEntry *fte;
-  //curproc->fileTable[oldfd]->of->countRef ++;
+    sys_close(newfd, 0);
+  }
+  
+  lock_acquire(TabFile.lk);
+
   fte = curproc->fileTable[oldfd];
   fte->dup[fte->dupCnt++] = newfd;
   curproc->fileTable[newfd] = fte;
 
   *retval = newfd;
+  lock_release(TabFile.lk);
   return 0;
 }
-
-/*void updateDup(int oldfd, int newfd)
-{
-  int i;
-  for (i = 0; i < OPEN_MAX / 10; i++)
-    if (curproc->fileTable[oldfd].dup[i] == -1)
-    {
-      curproc->fileTable[oldfd].dup[i] = newfd;
-      break;
-    }
-}*/
 
 int sys_close(int fd, int32_t *retval)
 {
@@ -294,7 +276,7 @@ int sys_close(int fd, int32_t *retval)
   for (i = 0; i < fte->dupCnt; i++)
   {
     curproc->fileTable[fte->dup[i]] = NULL;
-    if (fte->dup[i] == STDOUT_FILENO)
+    /*if (fte->dup[i] == STDOUT_FILENO)
     {
       curproc->fileTable[i] = kmalloc(sizeof(struct fileTableEntry));
       curproc->fileTable[i]->fd = STDOUT_FILENO;
@@ -317,19 +299,28 @@ int sys_close(int fd, int32_t *retval)
       curproc->fileTable[i]->of = NULL;
       curproc->fileTable[i]->offset = 0;
       curproc->fileTable[i]->dupCnt = 0;
-    }
+    }*/
+  }
+
+  if(of == NULL && (fd == STDIN_FILENO || fd == STDOUT_FILENO || fd == STDERR_FILENO))
+  {
+    kfree(fte);
+    lock_release(TabFile.lk);
+    return 0;
   }
 
   if (of == NULL)
   {
-    lock_release(TabFile.lk);
     *retval = -1;
+    kfree(fte);
+    lock_release(TabFile.lk);
     return EBADF;
   }
 
   of->countRef--;
   if (of->countRef > 0)
   {
+    kfree(fte);
     lock_release(TabFile.lk);
     return 0;
   } // just decrement ref cnt
@@ -339,8 +330,9 @@ int sys_close(int fd, int32_t *retval)
   //of->offset = 0;
   if (vn == NULL)
   {
-    lock_release(TabFile.lk);
     *retval = -1;
+    kfree(fte);
+    lock_release(TabFile.lk);
     return EBADF;
   }
 

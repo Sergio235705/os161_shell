@@ -141,6 +141,7 @@ struct proc *kproc;
 static
 void 
 InitOpenFile(struct proc *proc)
+{
 	int i;
     for(i=0;i<3;i++)
 	{ 
@@ -159,7 +160,8 @@ InitOpenFile(struct proc *proc)
 		}
 	    proc->fileTable[i]->of=NULL;
 		proc->fileTable[i]->offset=0;
-		proc->fileTable[i]->dup[proc->fileTable[i]->dupCnt++] = i
+		proc->fileTable[i]->dupCnt = 0;
+		proc->fileTable[i]->dup[proc->fileTable[i]->dupCnt++] = i;
 	}
 }
 #endif
