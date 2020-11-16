@@ -43,6 +43,7 @@
  */
 
 #include <types.h>
+#include <kern/unistd.h>
 #include <spl.h>
 #include <proc.h>
 #include <current.h>
@@ -140,11 +141,26 @@ struct proc *kproc;
 static
 void 
 InitOpenFile(struct proc *proc)
-{   int i;
-    for(i=0;i<OPEN_MAX;i++)
+{
+	int i;
+    for(i=0;i<3;i++)
 	{ 
-	    proc->fileTable[i].fd=-1;
-	    proc->fileTable[i].of=NULL;
+		proc->fileTable[i] = kmalloc(sizeof(struct fileTableEntry));
+		if(i == STDOUT_FILENO)
+		{
+			proc->fileTable[i]->fd = STDOUT_FILENO;
+		}
+		if(i == STDIN_FILENO)
+		{
+			proc->fileTable[i]->fd = STDIN_FILENO;
+		}
+		if(i == STDERR_FILENO)
+		{
+			proc->fileTable[i]->fd = STDERR_FILENO;
+		}
+	    proc->fileTable[i]->of=NULL;
+		proc->fileTable[i]->offset=0;
+		proc->fileTable[i]->fteCnt = 1;
 	}
 }
 #endif
@@ -458,11 +474,11 @@ void
 proc_file_table_copy(struct proc *psrc, struct proc *pdest) {
   int fd;
   for (fd=0; fd<OPEN_MAX; fd++) {
-    struct openfile *of = psrc->fileTable[fd].of;
-    pdest->fileTable[fd].of = of;
+    struct openfile *of = psrc->fileTable[fd]->of;
+    pdest->fileTable[fd]->of = of;
     if (of != NULL) {
       /* incr reference count */
-      openfileIncrRefCount(of);
+	  of->countRef++;
     }
   }
 }

@@ -36,13 +36,12 @@
 #include <copyinout.h>
 #include <limits.h>
 
-
+#if OPT_SHELL
 #define SYSTEM_OPEN_MAX (10 * OPEN_MAX)
 
 struct openfile
 {
   struct vnode *vn;
-  off_t offset;
   unsigned int countRef;
 };
 
@@ -51,6 +50,7 @@ struct tableOpenFile
   struct lock *lk;
   struct openfile systemFileTable[SYSTEM_OPEN_MAX];
 };
+#endif
 
 struct trapframe; /* from <machine/trapframe.h> */
 
@@ -79,22 +79,20 @@ __DEAD void enter_new_process(int argc, userptr_t argv, userptr_t env,
 int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 #if OPT_SHELL
-struct openfile;
-void openfileIncrRefCount(struct openfile *of);
-void openfileDecrRefCount(struct openfile *of);
-int sys_open(userptr_t path, int openflags, mode_t mode, int *errp);
-int sys_close(int fd);
-int sys_write(int fd, userptr_t buf_ptr, size_t size);
-int sys_read(int fd, userptr_t buf_ptr, size_t size);
+void updateDup(int oldfd,int newfd);
+int changeOffset(int fd,off_t offset , int start);
+int sys_open(userptr_t path, int openflags, mode_t mode, int32_t *retval);
+int sys_close(int fd , int32_t *retval);
+int sys_write(int fd, userptr_t buf_ptr, size_t siz, int32_t *retval);
+int sys_read(int fd, userptr_t buf_ptr, size_t size, int32_t *retval);
 void sys__exit(int status);
-int sys_waitpid(pid_t pid, userptr_t statusp, int options);
+int sys_waitpid(pid_t pid, userptr_t statusp, int options , int32_t *retval);
 pid_t sys_getpid(void);
-pid_t sys_fork(struct trapframe *ctf);
-int sys__getcwd(char* buf, size_t buflen);
-int sys_execv(char *progname, char *args[]);
-int sys_lseek(int fd ,off_t offset, int start);
-int sys_dup2(int oldfd,int newfd);
+pid_t sys_fork(struct trapframe *ctf , int32_t *retval);
+int sys__getcwd(char* buf, size_t buflen , int32_t *retval);
+int sys_execv(char *progname, char *args[] , int32_t *retval);
+int sys_lseek(int fd ,off_t offset, int start, int32_t *retval);
+int sys_dup2(int oldfd,int newfd, int32_t *retval);
 int sys_remove(userptr_t pathname, int32_t *retval);
-
 #endif
 #endif /* _SYSCALL_H_ */
