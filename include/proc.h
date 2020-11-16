@@ -67,9 +67,7 @@ struct fileTableEntry
   off_t offset;
   int flags;
   int fd;
-  int dupCnt;
-  int dup[OPEN_MAX]; //contiene 1 se l'indice nella fileTable ha questa Entry
-
+  int fteCnt;
 };
 #endif
 struct proc {

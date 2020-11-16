@@ -171,7 +171,7 @@ int sys_open(userptr_t path, int openflags, mode_t mode, int32_t *retval)
   for (i = 0; i < SYSTEM_OPEN_MAX; i++)
   {
 
-    if (/*TabFile.systemFileTable[i].vn != NULL &&*/ TabFile.systemFileTable[i].vn == v)
+    if (TabFile.systemFileTable[i].vn == v)
     {
       of = &TabFile.systemFileTable[i];
       TabFile.systemFileTable[i].countRef++;
@@ -219,8 +219,7 @@ int sys_open(userptr_t path, int openflags, mode_t mode, int32_t *retval)
         curproc->fileTable[fd]->offset = offset;
         curproc->fileTable[fd]->flags = openflags;
         curproc->fileTable[fd]->fd = fd;
-        curproc->fileTable[fd]->dupCnt = 0;
-        curproc->fileTable[fd]->dup[curproc->fileTable[fd]->dupCnt++] = fd;
+        curproc->fileTable[fd]->fteCnt = 1;
         *retval = fd;
         lock_release(TabFile.lk);
         return 0;
@@ -238,15 +237,18 @@ int sys_open(userptr_t path, int openflags, mode_t mode, int32_t *retval)
 int sys_dup2(int oldfd, int newfd, int32_t *retval)
 {
   struct fileTableEntry *fte = NULL;
-  if(curproc->fileTable[newfd] != NULL && newfd != 0 && newfd != 1 && newfd != 2)
-  {
-    sys_close(newfd, 0);
-  }
-  
-  lock_acquire(TabFile.lk);
+  int result;
 
+  result = sys_close(newfd, 0);
+  lock_acquire(TabFile.lk);
+  if (result)
+  {
+    *retval = -1;
+    lock_release(TabFile.lk);
+    return ESPIPE;
+  }
   fte = curproc->fileTable[oldfd];
-  fte->dup[fte->dupCnt++] = newfd;
+  fte->fteCnt++;
   curproc->fileTable[newfd] = fte;
 
   *retval = newfd;
@@ -261,7 +263,6 @@ int sys_close(int fd, int32_t *retval)
   struct openfile *of = NULL;
   struct fileTableEntry *fte = NULL;
   struct vnode *vn;
-  int i;
 
   if (fd < 0 || fd > OPEN_MAX)
   {
@@ -272,72 +273,37 @@ int sys_close(int fd, int32_t *retval)
 
   fte = curproc->fileTable[fd];
   of = curproc->fileTable[fd]->of;
+  curproc->fileTable[fd] = NULL;
 
-  for (i = 0; i < fte->dupCnt; i++)
-  {
-    curproc->fileTable[fte->dup[i]] = NULL;
-    /*if (fte->dup[i] == STDOUT_FILENO)
-    {
-      curproc->fileTable[i] = kmalloc(sizeof(struct fileTableEntry));
-      curproc->fileTable[i]->fd = STDOUT_FILENO;
-      curproc->fileTable[i]->of = NULL;
-      curproc->fileTable[i]->offset = 0;
-      curproc->fileTable[i]->dupCnt = 0;
-    }
-    if (fte->dup[i] == STDIN_FILENO)
-    {
-      curproc->fileTable[i] = kmalloc(sizeof(struct fileTableEntry));
-      curproc->fileTable[i]->fd = STDIN_FILENO;
-      curproc->fileTable[i]->of = NULL;
-      curproc->fileTable[i]->offset = 0;
-      curproc->fileTable[i]->dupCnt = 0;
-    }
-    if (fte->dup[i] == STDERR_FILENO)
-    {
-      curproc->fileTable[i] = kmalloc(sizeof(struct fileTableEntry));
-      curproc->fileTable[i]->fd = STDERR_FILENO;
-      curproc->fileTable[i]->of = NULL;
-      curproc->fileTable[i]->offset = 0;
-      curproc->fileTable[i]->dupCnt = 0;
-    }*/
-  }
-
-  if(of == NULL && (fd == STDIN_FILENO || fd == STDOUT_FILENO || fd == STDERR_FILENO))
-  {
-    kfree(fte);
-    lock_release(TabFile.lk);
-    return 0;
-  }
-
-  if (of == NULL)
+  if (fte == NULL)
   {
     *retval = -1;
-    kfree(fte);
     lock_release(TabFile.lk);
     return EBADF;
   }
 
-  of->countRef--;
-  if (of->countRef > 0)
+  if (fte->fd == STDIN_FILENO || fte->fd == STDOUT_FILENO || fte->fd == STDERR_FILENO)
   {
-    kfree(fte);
     lock_release(TabFile.lk);
     return 0;
-  } // just decrement ref cnt
-
-  vn = of->vn;
-  of->vn = NULL;
-  //of->offset = 0;
-  if (vn == NULL)
-  {
-    *retval = -1;
-    kfree(fte);
-    lock_release(TabFile.lk);
-    return EBADF;
   }
 
-  vfs_close(vn);
-  kfree(fte);
+  fte->fteCnt--;
+  if (fte->fteCnt == 0)
+  {
+    kfree(fte);
+    of->countRef--;
+    if (of->countRef == 0)
+    {
+      vn = of->vn;
+      of->vn = NULL;
+      vfs_close(vn);
+      lock_release(TabFile.lk);
+      return 0;
+    } 
+  }
+
+
   lock_release(TabFile.lk);
   return 0;
 }
@@ -346,8 +312,6 @@ int sys_lseek(int fd, off_t offset, int start, int32_t *retval)
 {
   lock_acquire(TabFile.lk);
   int result;
-  //int i;
-  //struct openfile *of = NULL;
 
   if (fd < 0 || fd > OPEN_MAX)
   {
@@ -362,27 +326,6 @@ int sys_lseek(int fd, off_t offset, int start, int32_t *retval)
     lock_release(TabFile.lk);
     return ESPIPE;
   }
-
-  //of = curproc->fileTable[fd]->of;
-  /*if (of == NULL || curproc->fileTable[fd]->fd == -1)
-  {
-    *retval = -1;
-    lock_release(TabFile.lk);
-    return EBADF;
-  }*/
-  /*for (i = 0; i < OPEN_MAX / 10; i++)
-  {
-    if (curproc->fileTable[fd]->dup[i] != -1)
-    {
-      result = changeOffset(curproc->fileTable[fd]->dup[i], offset, start);
-      if (result)
-      {
-        *retval = -1;
-        lock_release(TabFile.lk);
-        return result;
-      }
-    }
-  }*/
   result = changeOffset(fd, offset, start);
   if (result)
   {

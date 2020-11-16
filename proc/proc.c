@@ -160,8 +160,7 @@ InitOpenFile(struct proc *proc)
 		}
 	    proc->fileTable[i]->of=NULL;
 		proc->fileTable[i]->offset=0;
-		proc->fileTable[i]->dupCnt = 0;
-		proc->fileTable[i]->dup[proc->fileTable[i]->dupCnt++] = i;
+		proc->fileTable[i]->fteCnt = 1;
 	}
 }
 #endif
