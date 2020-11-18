@@ -31,7 +31,7 @@ file_read(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
   lock_acquire(TabFile.lk);
   struct iovec iov;
   struct uio ku;
-  int offset;
+  off_t offset;
   int nread;
   struct vnode *vn;
   struct openfile *of;
@@ -85,9 +85,9 @@ file_write(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
 
   struct iovec iov;
   struct uio ku;
-  int offset;
+  off_t offset;
   struct stat *stats = NULL;
-  int result, nwrite;
+  int nwrite;
   struct vnode *vn;
   struct openfile *of;
   void *kbuf;
@@ -125,10 +125,9 @@ file_write(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
   kbuf = kmalloc(size);
   copyin(buf_ptr, kbuf, size);
   uio_kinit(&iov, &ku, kbuf, size, offset, UIO_WRITE);
-  result = VOP_WRITE(vn, &ku);
-  if (result)
+  *retval = VOP_WRITE(vn, &ku);
+  if (*retval)
   {
-    *retval = result;
     lock_release(TabFile.lk);
     return -1;
   }
@@ -155,7 +154,7 @@ int sys_open(userptr_t path, int openflags, mode_t mode, int32_t *retval)
   lock_acquire(TabFile.lk);
 
   int result, fd, i, offset = 0;
-  struct vnode *v;
+  struct vnode *v = NULL;;
   struct stat *stats = NULL;
   struct openfile *of = NULL;
 
@@ -303,15 +302,14 @@ int sys_close(int fd, int32_t *retval)
     } 
   }
 
-
   lock_release(TabFile.lk);
   return 0;
 }
 
-int sys_lseek(int fd, off_t offset, int start, int32_t *retval)
+int sys_lseek(int fd, off_t pos, int whence, int64_t *retval)
 {
   lock_acquire(TabFile.lk);
-  int result;
+  struct stat stats;
 
   if (fd < 0 || fd > OPEN_MAX)
   {
@@ -326,49 +324,49 @@ int sys_lseek(int fd, off_t offset, int start, int32_t *retval)
     lock_release(TabFile.lk);
     return ESPIPE;
   }
-  result = changeOffset(fd, offset, start);
-  if (result)
+
+  if (whence == SEEK_SET)
+  {
+    if (pos < 0)
   {
     *retval = -1;
     lock_release(TabFile.lk);
-    return result;
+      return EINVAL;
   }
+    curproc->fileTable[fd]->offset = pos;
   *retval = curproc->fileTable[fd]->offset;
   lock_release(TabFile.lk);
   return 0;
 }
-
-int changeOffset(int fd, off_t offset, int start)
+  if (whence == SEEK_CUR)
 {
-  struct stat *stats = NULL;
-  if (start & SEEK_SET)
+    if ((curproc->fileTable[fd]->offset + pos) < 0)
   {
-    if (offset < 0)
-    {
+      *retval = -1;
+      lock_release(TabFile.lk);
       return EINVAL;
     }
-    curproc->fileTable[fd]->offset = offset;
+    curproc->fileTable[fd]->offset += pos;
+    *retval = curproc->fileTable[fd]->offset;
+    lock_release(TabFile.lk);
     return 0;
   }
-  if (start & SEEK_CUR)
+  if (whence == SEEK_END)
   {
-    if ((curproc->fileTable[fd]->offset + offset) < 0)
+    VOP_STAT(curproc->fileTable[fd]->of->vn, &stats);
+    if ((stats.st_size + pos) < 0)
     {
+      *retval = -1;
+      lock_release(TabFile.lk);
       return EINVAL;
     }
-    curproc->fileTable[fd]->offset += offset;
+    curproc->fileTable[fd]->offset = stats.st_size + pos;
+    *retval = curproc->fileTable[fd]->offset;
+    lock_release(TabFile.lk);
     return 0;
   }
-  if (start & SEEK_END)
-  {
-    VOP_STAT(curproc->fileTable[fd]->of->vn, stats);
-    if ((stats->st_size + offset) < 0)
-    {
-      return EINVAL;
-    }
-    curproc->fileTable[fd]->offset = stats->st_size + offset;
-    return 0;
-  }
+  *retval = -1;
+  lock_release(TabFile.lk);
   return EINVAL;
 }
 

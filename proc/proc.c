@@ -52,23 +52,20 @@
 #include <syscall.h>
 #include <opt-shell.h>
 
-
-
 #if OPT_SHELL
 #include <synch.h>
 #define MAX_PROC 100
 
 extern struct tableOpenFile TabFile;
 
-static struct _processTable {
-  int active;           /* initial value 0 */
-  struct proc *proc[MAX_PROC+1]; /* [0] not used. pids are >= 1 */
-  int last_i;           /* index of last allocated pid */
-  struct spinlock lk;	/* Lock for this table */
+static struct _processTable
+{
+	int active;						 /* initial value 0 */
+	struct proc *proc[MAX_PROC + 1]; /* [0] not used. pids are >= 1 */
+	int last_i;						 /* index of last allocated pid */
+	struct spinlock lk;				 /* Lock for this table */
 } processTable;
 #endif
-
-
 
 struct proc *
 proc_search_pid(pid_t pid) 
@@ -92,11 +89,14 @@ proc_init_waitpid(struct proc *proc, const char *name)
   /* search a free index in table using a circular strategy */
   int i;
   spinlock_acquire(&processTable.lk);
-  i = processTable.last_i+1;
+	i = processTable.last_i + 1;
   proc->p_pid = 0;
-  if (i>MAX_PROC) i=1;
-  while (i!=processTable.last_i) {
-    if (processTable.proc[i] == NULL) {
+	if (i > MAX_PROC)
+		i = 1;
+	while (i != processTable.last_i)
+	{
+		if (processTable.proc[i] == NULL)
+		{
       processTable.proc[i] = proc;
       processTable.last_i = i;
       proc->p_pid = i;
@@ -105,7 +105,8 @@ proc_init_waitpid(struct proc *proc, const char *name)
     i++;
   }
   spinlock_release(&processTable.lk);
-  if (proc->p_pid==0) {
+	if (proc->p_pid == 0)
+	{
     panic("Processes table is full\n");
   }
   proc->p_status = 0;
@@ -124,7 +125,7 @@ proc_end_waitpid(struct proc *proc)
   int i;
   spinlock_acquire(&processTable.lk);
   i = proc->p_pid;
-  KASSERT(i>0 && i<=MAX_PROC);
+	KASSERT(i > 0 && i <= MAX_PROC);
   processTable.proc[i] = NULL;
   spinlock_release(&processTable.lk);
   sem_destroy(proc->p_sem);
@@ -138,8 +139,7 @@ proc_end_waitpid(struct proc *proc)
 struct proc *kproc;
 
 #if OPT_SHELL
-static
-void 
+static void
 InitOpenFile(struct proc *proc)
 {
 	int i;
@@ -168,18 +168,19 @@ InitOpenFile(struct proc *proc)
 /*
  * Create a proc structure.
  */
-static
-struct proc *
+static struct proc *
 proc_create(const char *name)
 {
 	struct proc *proc;
 
 	proc = kmalloc(sizeof(*proc));
-	if (proc == NULL) {
+	if (proc == NULL)
+	{
 		return NULL;
 	}
 	proc->p_name = kstrdup(name);
-	if (proc->p_name == NULL) {
+	if (proc->p_name == NULL)
+	{
 		kfree(proc);
 		return NULL;
 	}
@@ -194,11 +195,10 @@ proc_create(const char *name)
 	proc->p_cwd = NULL;
 	
 	#if OPT_SHELL
-	proc_init_waitpid(proc,name);
-	bzero(proc->fileTable,OPEN_MAX*sizeof(struct openfile *));
+	proc_init_waitpid(proc, name);
+	bzero(proc->fileTable, OPEN_MAX * sizeof(struct openfile *));
 	InitOpenFile(proc);
-	/*chiedere a Sergio*/
-	//proc->lk=lock_create("lk_tab");
+
 	#endif
 	return proc;
 }
@@ -209,8 +209,7 @@ proc_create(const char *name)
  * Note: nothing currently calls this. Your wait/exit code will
  * probably want to do so.
  */
-void
-proc_destroy(struct proc *proc)
+void proc_destroy(struct proc *proc)
 {
 	/*
 	 * You probably want to destroy and null out much of the
@@ -230,13 +229,15 @@ proc_destroy(struct proc *proc)
 	 */
 
 	/* VFS fields */
-	if (proc->p_cwd) {
+	if (proc->p_cwd)
+	{
 		VOP_DECREF(proc->p_cwd);
 		proc->p_cwd = NULL;
 	}
 
 	/* VM fields */
-	if (proc->p_addrspace) {
+	if (proc->p_addrspace)
+	{
 		/*
 		 * If p is the current process, remove it safely from
 		 * p_addrspace before destroying it. This makes sure
@@ -272,11 +273,13 @@ proc_destroy(struct proc *proc)
 		 */
 		struct addrspace *as;
 
-		if (proc == curproc) {
+		if (proc == curproc)
+		{
 			as = proc_setas(NULL);
 			as_deactivate();
 		}
-		else {
+		else
+		{
 			as = proc->p_addrspace;
 			proc->p_addrspace = NULL;
 		}
@@ -295,11 +298,11 @@ proc_destroy(struct proc *proc)
 /*
  * Create the process structure for the kernel.
  */
-void
-proc_bootstrap(void)
+void proc_bootstrap(void)
 {
 	kproc = proc_create("[kernel]");
-	if (kproc == NULL) {
+	if (kproc == NULL)
+	{
 		panic("proc_create for kproc failed\n");
 	}
 	#if OPT_SHELL
@@ -322,7 +325,8 @@ proc_create_runprogram(const char *name)
 	struct proc *newproc;
 
 	newproc = proc_create(name);
-	if (newproc == NULL) {
+	if (newproc == NULL)
+	{
 		return NULL;
 	}
 
@@ -338,7 +342,8 @@ proc_create_runprogram(const char *name)
 	 * the only reference to it.)
 	 */
 	spinlock_acquire(&curproc->p_lock);
-	if (curproc->p_cwd != NULL) {
+	if (curproc->p_cwd != NULL)
+	{
 		VOP_INCREF(curproc->p_cwd);
 		newproc->p_cwd = curproc->p_cwd;
 	}
@@ -356,8 +361,7 @@ proc_create_runprogram(const char *name)
  * the timer interrupt context switch, and any other implicit uses
  * of "curproc".
  */
-int
-proc_addthread(struct proc *proc, struct thread *t)
+int proc_addthread(struct proc *proc, struct thread *t)
 {
 	int spl;
 
@@ -383,8 +387,7 @@ proc_addthread(struct proc *proc, struct thread *t)
  * the timer interrupt context switch, and any other implicit uses
  * of "curproc".
  */
-void
-proc_remthread(struct thread *t)
+void proc_remthread(struct thread *t)
 {
 	struct proc *proc;
 	int spl;
@@ -416,7 +419,8 @@ proc_getas(void)
 	struct addrspace *as;
 	struct proc *proc = curproc;
 
-	if (proc == NULL) {
+	if (proc == NULL)
+	{
 		return NULL;
 	}
 
@@ -445,8 +449,7 @@ proc_setas(struct addrspace *newas)
 	return oldas;
 }
 
-int 
-proc_wait(struct proc *proc)
+int proc_wait(struct proc *proc)
 {
 #if OPT_SHELL
         int return_status;
@@ -468,17 +471,17 @@ proc_wait(struct proc *proc)
 #endif
 }
 
-
 #if OPT_SHELL
-void 
-proc_file_table_copy(struct proc *psrc, struct proc *pdest) {
+void proc_file_table_copy(struct proc *psrc, struct proc *pdest)
+{
   int fd;
-  for (fd=0; fd<OPEN_MAX; fd++) {
-    struct openfile *of = psrc->fileTable[fd]->of;
-    pdest->fileTable[fd]->of = of;
-    if (of != NULL) {
-      /* incr reference count */
-	  of->countRef++;
+	for (fd = 0; fd < OPEN_MAX; fd++)
+	{
+		struct fileTableEntry *fte = psrc->fileTable[fd];
+		pdest->fileTable[fd] = fte;
+		if (fte != NULL)
+		{
+			fte->fteCnt++;
     }
   }
 }
