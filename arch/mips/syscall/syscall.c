@@ -123,25 +123,15 @@ void syscall(struct trapframe *tf)
 		err = sys_write((int)tf->tf_a0,
 						(userptr_t)tf->tf_a1,
 						(size_t)tf->tf_a2, &retval);
-		/* error: function not implemented */
-		if (err < 0)
-			err = ENOSYS;
-		else
-			err = 0;
 		break;
 
 	case SYS_read:
 		err = sys_read((int)tf->tf_a0,
 					   (userptr_t)tf->tf_a1,
 					   (size_t)tf->tf_a2, &retval);
-		if (err < 0)
-			err = ENOSYS;
-		else
-			err = 0;
 		break;
 
 	case SYS__exit:
-		/* TODO: just avoid crash */
 		sys__exit((int)tf->tf_a0);
 		break;
 
@@ -149,18 +139,10 @@ void syscall(struct trapframe *tf)
 		err = sys_waitpid((pid_t)tf->tf_a0,
 						  (userptr_t)tf->tf_a1,
 						  (int)tf->tf_a2, &retval);
-		if (err < 0)
-			err = ENOSYS;
-		else
-			err = 0;
 		break;
 
 	case SYS_getpid:
 		err = sys_getpid();
-		if (err < 0)
-			err = ENOSYS;
-		else
-			err = 0;
 		break;
 
 	case SYS_open:
@@ -175,42 +157,23 @@ void syscall(struct trapframe *tf)
 
 	case SYS_remove:
 		err = sys_remove((userptr_t)tf->tf_a0, &retval);
-		//err = 0; //be careful here TO DO
 		break;
 
 	case SYS_fork:
 		err = sys_fork(tf, &retval);
-		if (err < 0)
-			err = ENOSYS;
-		else
-			err = 0;
 		break;
 
 	case SYS_execv:
 		err = sys_execv((char *)tf->tf_a0,
 						(char **)tf->tf_a1, &retval);
-		if (err < 0)
-			err = ENOSYS;
-		else
-			err = 0;
 		break;
 
 	case SYS___getcwd:
 		err = sys__getcwd((char *)tf->tf_a0, (size_t)tf->tf_a1, &retval);
-		if (err < 0)
-			err = ENOENT;
-		else
-			err = 0;
-
 		break;
 
 	case SYS_dup2:
 		err = sys_dup2((int)tf->tf_a0, (int)tf->tf_a1, &retval);
-		if (err < 0)
-			err = ENOENT;
-		else
-			err = 0;
-
 		break;
 
 	case SYS_lseek:

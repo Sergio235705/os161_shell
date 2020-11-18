@@ -32,16 +32,16 @@ file_read(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
   struct iovec iov;
   struct uio ku;
   off_t offset;
-  int nread;
+  int nread, result;
   struct vnode *vn;
   struct openfile *of;
   void *kbuf;
 
   if (fd < 0 || fd > OPEN_MAX)
   {
-    *retval = EBADF;
+    *retval = -1;
     lock_release(TabFile.lk);
-    return -1;
+    return EBADF;
   }
 
   of = curproc->fileTable[fd]->of;
@@ -49,9 +49,9 @@ file_read(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
 
   if (of == NULL)
   {
-    *retval = EBADF;
+    *retval = -1;
     lock_release(TabFile.lk);
-    return -1;
+    return EBADF;
   }
   vn = of->vn;
   if (vn == NULL)
@@ -63,11 +63,12 @@ file_read(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
 
   kbuf = kmalloc(size);
   uio_kinit(&iov, &ku, kbuf, size, offset, UIO_READ);
-  *retval = VOP_READ(vn, &ku);
-  if (*retval)
+  result = VOP_READ(vn, &ku);
+  if (result)
   {
+    *retval = -1;
     lock_release(TabFile.lk);
-    return -1;
+    return result;
   }
   curproc->fileTable[fd]->offset = ku.uio_offset;
   nread = size - ku.uio_resid;
@@ -87,24 +88,24 @@ file_write(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
   struct uio ku;
   off_t offset;
   struct stat *stats = NULL;
-  int nwrite;
+  int nwrite, result;
   struct vnode *vn;
   struct openfile *of;
   void *kbuf;
 
   if (fd < 0 || fd > OPEN_MAX)
   {
-    *retval = EBADF;
+    *retval = -1;
     lock_release(TabFile.lk);
-    return -1;
+    return EBADF;
   }
 
   of = curproc->fileTable[fd]->of;
   if (of == NULL)
   {
-    *retval = EBADF;
+    *retval = -1;
     lock_release(TabFile.lk);
-    return -1;
+    return EBADF;
   }
   if (curproc->fileTable[fd]->flags & O_APPEND)
   {
@@ -118,18 +119,19 @@ file_write(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
   vn = of->vn;
   if (vn == NULL)
   {
-    *retval = EBADF;
+    *retval = -1;
     lock_release(TabFile.lk);
-    return -1;
+    return EBADF;
   }
   kbuf = kmalloc(size);
   copyin(buf_ptr, kbuf, size);
   uio_kinit(&iov, &ku, kbuf, size, offset, UIO_WRITE);
-  *retval = VOP_WRITE(vn, &ku);
-  if (*retval)
+  result = VOP_WRITE(vn, &ku);
+  if (result)
   {
+    *retval = -1;
     lock_release(TabFile.lk);
-    return -1;
+    return result;
   }
   kfree(kbuf);
   curproc->fileTable[fd]->offset = ku.uio_offset;
