@@ -119,6 +119,7 @@ common_prog(int nargs, char **args)
 {
 	struct proc *proc;
 	int result;
+	pid_t pid_2;
 
 	/* Create a process for the new program to run in. */
 	proc = proc_create_runprogram(args[0] /* name */);
@@ -133,7 +134,7 @@ common_prog(int nargs, char **args)
 	#if OPT_SHELL
 	pid_t pid = proc->p_pid;
 	int exit_code;
-	pid_t pid_2 = sys_waitpid(pid,(userptr_t)&exit_code,0,0);
+	result = sys_waitpid(pid,(userptr_t)&exit_code,0, &pid_2);
 	if(pid_2 != pid){
 		kprintf("Something goes wrong: pid returned != pid\n");
 		}

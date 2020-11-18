@@ -13,7 +13,6 @@
 #include <kern/errno.h>
 #include <lib.h>
 #include <syscall.h>
-#include <proc.h>
 #include <clock.h>
 #include <copyinout.h>
 #include <thread.h>
@@ -50,8 +49,11 @@ int sys_waitpid(pid_t pid, userptr_t statusp, int options, int32_t *retval)
 	}
 	s = proc_wait(p);
 	if (statusp != NULL)
+	{
 		*(int *)statusp = s;
-	return pid;
+	}
+	*retval = pid;
+	return 0;
 }
 
 pid_t sys_getpid(void)
@@ -90,8 +92,8 @@ pid_t sys_fork(struct trapframe *ctf, int32_t *retval)
 	if (newp->p_addrspace == NULL)
 	{
 		proc_destroy(newp);
-		*retval = ENOMEM;
-		return -1;
+		*retval = -1;
+		return ENOMEM;
 	}
 
 	proc_file_table_copy(curproc, newp);
@@ -100,8 +102,8 @@ pid_t sys_fork(struct trapframe *ctf, int32_t *retval)
 	if (tf_child == NULL)
 	{
 		proc_destroy(newp);
-		*retval = ENOMEM;
-		return -1;
+		*retval = -1;
+		return ENOMEM;
 	}
 	memcpy(tf_child, ctf, sizeof(struct trapframe));
 
@@ -117,11 +119,12 @@ pid_t sys_fork(struct trapframe *ctf, int32_t *retval)
 	{
 		proc_destroy(newp);
 		kfree(tf_child);
-		*retval = ENOMEM;
-		return -1;
+		*retval = -1;
+		return ENOMEM;
 	}
 
-	return newp->p_pid;
+	*retval = newp->p_pid;
+	return 0;
 }
 
 int sys_execv(char *progname, char *args[], int32_t *retval)

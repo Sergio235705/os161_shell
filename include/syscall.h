@@ -35,6 +35,7 @@
 #include "opt-shell.h"
 #include <copyinout.h>
 #include <limits.h>
+#include <proc.h>
 
 #if OPT_SHELL
 #define SYSTEM_OPEN_MAX (10 * OPEN_MAX)
@@ -81,7 +82,7 @@ int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 #if OPT_SHELL
 void updateDup(int oldfd,int newfd);
 int changeOffset(int fd,off_t offset , int start);
-int sys_open(userptr_t path, int openflags, mode_t mode, int32_t *retval);
+int sys_open(struct proc *p, userptr_t path, int openflags, mode_t mode, int32_t *retval);
 int sys_close(int fd , int32_t *retval);
 int sys_write(int fd, userptr_t buf_ptr, size_t siz, int32_t *retval);
 int sys_read(int fd, userptr_t buf_ptr, size_t size, int32_t *retval);

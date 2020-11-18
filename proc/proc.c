@@ -50,6 +50,7 @@
 #include <addrspace.h>
 #include <vnode.h>
 #include <syscall.h>
+#include <kern/fcntl.h>
 #include <opt-shell.h>
 
 #if OPT_SHELL
@@ -68,69 +69,69 @@ static struct _processTable
 #endif
 
 struct proc *
-proc_search_pid(pid_t pid) 
+proc_search_pid(pid_t pid)
 {
 #if OPT_SHELL
-  struct proc *p;
-  KASSERT(pid >= 0 && pid < MAX_PROC);
-  p = processTable.proc[pid];
-  KASSERT(p->p_pid == pid);
-  return p;
+	struct proc *p;
+	KASSERT(pid >= 0 && pid < MAX_PROC);
+	p = processTable.proc[pid];
+	KASSERT(p->p_pid == pid);
+	return p;
 #else
-  (void)pid;
-  return NULL;
+	(void)pid;
+	return NULL;
 #endif
 }
 
 static void
-proc_init_waitpid(struct proc *proc, const char *name) 
+proc_init_waitpid(struct proc *proc, const char *name)
 {
 #if OPT_SHELL
-  /* search a free index in table using a circular strategy */
-  int i;
-  spinlock_acquire(&processTable.lk);
+	/* search a free index in table using a circular strategy */
+	int i;
+	spinlock_acquire(&processTable.lk);
 	i = processTable.last_i + 1;
-  proc->p_pid = 0;
+	proc->p_pid = 0;
 	if (i > MAX_PROC)
 		i = 1;
 	while (i != processTable.last_i)
 	{
 		if (processTable.proc[i] == NULL)
 		{
-      processTable.proc[i] = proc;
-      processTable.last_i = i;
-      proc->p_pid = i;
-      break;
-    }
-    i++;
-  }
-  spinlock_release(&processTable.lk);
+			processTable.proc[i] = proc;
+			processTable.last_i = i;
+			proc->p_pid = i;
+			break;
+		}
+		i++;
+	}
+	spinlock_release(&processTable.lk);
 	if (proc->p_pid == 0)
 	{
-    panic("Processes table is full\n");
-  }
-  proc->p_status = 0;
-  proc->p_sem = sem_create(name, 0);
+		panic("Processes table is full\n");
+	}
+	proc->p_status = 0;
+	proc->p_sem = sem_create(name, 0);
 #else
-  (void)proc;
-  (void)name;
+	(void)proc;
+	(void)name;
 #endif
 }
 
 static void
-proc_end_waitpid(struct proc *proc) 
+proc_end_waitpid(struct proc *proc)
 {
 #if OPT_SHELL
-  /* remove the process from the table */
-  int i;
-  spinlock_acquire(&processTable.lk);
-  i = proc->p_pid;
+	/* remove the process from the table */
+	int i;
+	spinlock_acquire(&processTable.lk);
+	i = proc->p_pid;
 	KASSERT(i > 0 && i <= MAX_PROC);
-  processTable.proc[i] = NULL;
-  spinlock_release(&processTable.lk);
-  sem_destroy(proc->p_sem);
+	processTable.proc[i] = NULL;
+	spinlock_release(&processTable.lk);
+	sem_destroy(proc->p_sem);
 #else
-  (void)proc;
+	(void)proc;
 #endif
 }
 /*
@@ -138,29 +139,48 @@ proc_end_waitpid(struct proc *proc)
  */
 struct proc *kproc;
 
+struct fileTableEntry *std_0;
+struct fileTableEntry *std_1;
+struct fileTableEntry *std_2;
+
 #if OPT_SHELL
 static void
 InitOpenFile(struct proc *proc)
 {
-	int i;
-    for(i=0;i<3;i++)
-	{ 
-		proc->fileTable[i] = kmalloc(sizeof(struct fileTableEntry));
-		if(i == STDOUT_FILENO)
+	if (std_0 != NULL)
+	{
+		std_0->fteCnt++;
+		proc->fileTable[0] = std_0;
+		std_1->fteCnt++;
+		proc->fileTable[1] = std_1;
+		std_2->fteCnt++;
+		proc->fileTable[2] = std_2;
+	}
+	else
+	{
+		if (kproc != NULL)
 		{
-			proc->fileTable[i]->fd = STDOUT_FILENO;
+			char *con_0, *con_1, *con_2;
+			int fd, err;
+
+			con_0 = kstrdup("con:");
+			con_1 = kstrdup("con:");
+			con_2 = kstrdup("con:");
+
+			err = sys_open(proc, (userptr_t)con_0, O_RDONLY, 0, &fd);
+			KASSERT(fd == 0);
+			KASSERT(err == 0);
+			err = sys_open(proc, (userptr_t)con_1, O_WRONLY, 0, &fd);
+			KASSERT(fd == 1);
+			KASSERT(err == 0);
+			err = sys_open(proc, (userptr_t)con_2, O_WRONLY, 0, &fd);
+			KASSERT(fd == 2);
+			KASSERT(err == 0);
+
+			std_0 = proc->fileTable[0];
+			std_1 = proc->fileTable[1];
+			std_2 = proc->fileTable[2];
 		}
-		if(i == STDIN_FILENO)
-		{
-			proc->fileTable[i]->fd = STDIN_FILENO;
-		}
-		if(i == STDERR_FILENO)
-		{
-			proc->fileTable[i]->fd = STDERR_FILENO;
-		}
-	    proc->fileTable[i]->of=NULL;
-		proc->fileTable[i]->offset=0;
-		proc->fileTable[i]->fteCnt = 1;
 	}
 }
 #endif
@@ -193,13 +213,13 @@ proc_create(const char *name)
 
 	/* VFS fields */
 	proc->p_cwd = NULL;
-	
-	#if OPT_SHELL
+
+#if OPT_SHELL
 	proc_init_waitpid(proc, name);
 	bzero(proc->fileTable, OPEN_MAX * sizeof(struct openfile *));
 	InitOpenFile(proc);
 
-	#endif
+#endif
 	return proc;
 }
 
@@ -288,9 +308,9 @@ void proc_destroy(struct proc *proc)
 
 	KASSERT(proc->p_numthreads == 0);
 	spinlock_cleanup(&proc->p_lock);
-	#if OPT_SHELL
+#if OPT_SHELL
 	proc_end_waitpid(proc);
-	#endif
+#endif
 	kfree(proc->p_name);
 	kfree(proc);
 }
@@ -305,12 +325,12 @@ void proc_bootstrap(void)
 	{
 		panic("proc_create for kproc failed\n");
 	}
-	#if OPT_SHELL
+#if OPT_SHELL
 	TabFile.lk = lock_create("Tab");
 	spinlock_init(&processTable.lk);
 	/* kernel process is not registered in the table */
 	processTable.active = 1;
-	#endif
+#endif
 }
 
 /*
@@ -452,37 +472,39 @@ proc_setas(struct addrspace *newas)
 int proc_wait(struct proc *proc)
 {
 #if OPT_SHELL
-        int return_status;
-        /* NULL and kernel proc forbidden */
+	int return_status;
+	/* NULL and kernel proc forbidden */
 	KASSERT(proc != NULL);
 	KASSERT(proc != kproc);
 
-        /* wait on semaphore or condition variable */ 
+	/* wait on semaphore or condition variable */
 
-        P(proc->p_sem);
+	P(proc->p_sem);
 
-        return_status = proc->p_status;
-        proc_destroy(proc);
-        return return_status;
+	return_status = proc->p_status;
+	proc_destroy(proc);
+	return return_status;
 #else
-        /* this doesn't synchronize */ 
-        (void)proc;
-        return 0;
+	/* this doesn't synchronize */
+	(void)proc;
+	return 0;
 #endif
 }
 
 #if OPT_SHELL
 void proc_file_table_copy(struct proc *psrc, struct proc *pdest)
 {
-  int fd;
+	int fd;
 	for (fd = 0; fd < OPEN_MAX; fd++)
 	{
-		struct fileTableEntry *fte = psrc->fileTable[fd];
-		pdest->fileTable[fd] = fte;
-		if (fte != NULL)
+		struct fileTableEntry *ftesrc = psrc->fileTable[fd];
+		struct fileTableEntry *ftedest = pdest->fileTable[fd];
+		pdest->fileTable[fd] = ftesrc;
+		if (ftesrc != NULL && ftesrc != ftedest)
 		{
-			fte->fteCnt++;
-    }
-  }
+			ftesrc->fteCnt++;
+		}
+
+	}
 }
 #endif
