@@ -55,7 +55,7 @@
 
 #if OPT_SHELL
 #include <synch.h>
-#define MAX_PROC 100
+
 
 extern struct tableOpenFile TabFile;
 
@@ -76,7 +76,8 @@ proc_search_pid(pid_t pid)
   struct proc *p;
   KASSERT(pid >= 0 && pid < MAX_PROC);
   p = processTable.proc[pid];
-  KASSERT(p->p_pid == pid);
+  if(p != NULL)
+  	KASSERT(p->p_pid == pid);
   return p;
 #else
   (void)pid;
@@ -179,6 +180,7 @@ proc_create(const char *name)
 	
 	#if OPT_SHELL
 	proc_init_waitpid(proc,name);
+	proc -> parent_p_pid = 1;
 	bzero(proc->fileTable,OPEN_MAX*sizeof(struct openfile *));
 	InitOpenFile(proc);
 	/*chiedere a Sergio*/

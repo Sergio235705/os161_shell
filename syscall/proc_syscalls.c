@@ -26,17 +26,20 @@
 #include <mips/trapframe.h>
 #include <synch.h>
 #include <test.h>
+#include <kern/wait.h>
 #if OPT_SHELL
+
 
 void
 sys__exit(int status)
 {
-  struct proc *p = curproc;
-  p->p_status = status & 0xff; /* just lower 8 bits returned */
-  proc_remthread(curthread);
-  V(p->p_sem);
-  thread_exit();
-  panic("thread_exit returned\n");
+	struct proc *p = curproc;
+	/*Let's create the error code in a linux fashion:*/
+	p->p_status = _MKWAIT_EXIT(status);
+	proc_remthread(curthread);
+	V(p->p_sem);
+	thread_exit();
+	panic("thread_exit returned\n");
 
 }
 
@@ -44,16 +47,38 @@ sys__exit(int status)
 
 
 int
-sys_waitpid(pid_t pid, userptr_t statusp, int options)
+sys_waitpid(pid_t pid, userptr_t statusp, int options,pid_t* retval)
 {
-  struct proc *p = proc_search_pid(pid);
-  int s;
-  (void)options; /* not handled */
-  if (p==NULL) return -1;
-  s = proc_wait(p);
-  if (statusp!=NULL) 
-    *(int*)statusp = s;
-  return pid;
+	*retval = -1;
+	/*Here we assume that pid can be only positive: no concept of group id*/
+	if (pid <= 0){
+		return ENOSYS;
+	}
+	if(pid >= PID_MAX || pid >= MAX_PROC || pid == curproc->p_pid || pid == curproc->parent_p_pid)
+		return ECHILD;
+	struct proc *p = proc_search_pid(pid);
+	int s,s1;
+	if(options!=0) //TO DO: Gestire le opzioni
+		if(options!= WNOHANG && options != WUNTRACED && options != (WNOHANG||WUNTRACED) )
+			return EINVAL;
+	if (p==NULL){
+		return ESRCH;
+	}
+	s = proc_wait(p);
+
+	if (statusp!=NULL)
+	{
+	int result = copyout(&s, (userptr_t) statusp, sizeof(int));
+
+	if(result)
+		return result;
+	if(copyin((userptr_t) statusp,&s1, sizeof(int)))
+		kprintf("bruh...2\n");
+
+	//memcpy(ret, &pid, sizeof(int));
+	}
+	*retval = pid;
+	return 0;
 }
 
 pid_t
@@ -72,46 +97,46 @@ call_enter_forked_process(void *tfv, unsigned long dummy) {
   panic("enter_forked_process returned (should not happen)\n");
 }
 
-pid_t sys_fork(struct trapframe *ctf) {
-  struct trapframe *tf_child;
-  struct proc *newp;
-  int result;
+int sys_fork(struct trapframe *ctf,pid_t* retval) {
+	struct trapframe *tf_child;
+	struct proc *newp;
+	int result;
 
-  KASSERT(curproc != NULL);
+	KASSERT(curproc != NULL);
 
-  newp = proc_create_runprogram(curproc->p_name);
-  if (newp == NULL) {
-    return ENOMEM;
-  }
-  as_copy(curproc->p_addrspace, &(newp->p_addrspace));
-  if(newp->p_addrspace == NULL){
-    proc_destroy(newp); 
-    return ENOMEM; 
-  }
-  tf_child = kmalloc(sizeof(struct trapframe));
-  if(tf_child == NULL){
-    proc_destroy(newp);
-    return ENOMEM; 
-  }
-  memcpy(tf_child, ctf, sizeof(struct trapframe));
+	newp = proc_create_runprogram(curproc->p_name);
+	if (newp == NULL) {
+		return ENOMEM;
+	}
+	as_copy(curproc->p_addrspace, &(newp->p_addrspace));
+	if(newp->p_addrspace == NULL){
+		proc_destroy(newp); 
+		return ENOMEM; 
+	}
+	tf_child = kmalloc(sizeof(struct trapframe));
+	if(tf_child == NULL){
+		proc_destroy(newp);
+		return ENOMEM; 
+	}
+	memcpy(tf_child, ctf, sizeof(struct trapframe));
 
-  /* TO BE DONE: linking parent/child, so that child terminated 
-     on parent exit */
+	/* TO BE DONE: linking parent/child, so that child terminated 
+		on parent exit */
+	newp->parent_p_pid = curproc->p_pid;
+	result = thread_fork(
+			curthread->t_name, newp,
+			call_enter_forked_process, 
+			(void *)tf_child, (unsigned long)0/*unused*/);
 
-  result = thread_fork(
-		 curthread->t_name, newp,
-		 call_enter_forked_process, 
-		 (void *)tf_child, (unsigned long)0/*unused*/);
-
-  if (result){
-    proc_destroy(newp);
-    kfree(tf_child);
-    return ENOMEM;
+	if (result){
+		proc_destroy(newp);
+		kfree(tf_child);
+		return ENOMEM;
   }
 
  
-
-  return  newp->p_pid;
+	*retval = newp->p_pid;
+  return  0;
 }
 
 
@@ -123,6 +148,13 @@ int sys_execv(char *progname, char *args[]){
 	int argc=0;
 	int i = 0,len,j;
 	struct addrspace * old_as;
+	char garbage[ARG_MAX+1];
+	char path_name[NAME_MAX+1];
+	size_t size = 0;
+	int end = 0;
+	result = copyinstr((userptr_t)progname, path_name, NAME_MAX, &size);
+	if(result)
+		return result;	
 	char** argv = (char **) kmalloc(sizeof (args) * sizeof (char *));
 	if (!argv) {
 	   return -1;
@@ -133,7 +165,7 @@ int sys_execv(char *progname, char *args[]){
 	//Riga aggiunta per committare
 	i = 0;
 	{
-		result = copyinstr((userptr_t)args, garbage, NAME_MAX, &size);
+		result = copyinstr((userptr_t)args, garbage, ARG_MAX, &size);
 		if (result)
 			return result;
 		while (!end)
@@ -142,20 +174,20 @@ int sys_execv(char *progname, char *args[]){
 			if(args[i] == NULL){
 				break;
 			}
-			result = copyinstr((userptr_t)args[i], garbage, NAME_MAX, &size);
+			result = copyinstr((userptr_t)args[i], garbage, ARG_MAX, &size);
 				if (result)
 					return result;
 			i++;
 			if(size == 0)
 				end = 1;
-				
+
 
 		}
 		argc = i;
 	}
 		
 	// looping through the arguments to copy into the new array.
-	for (i = 0;args[i] != NULL; i++) {
+	for (i = 0;i < argc; i++) {
 
 	len = strlen(args[i]) + 4 - (strlen(args[i]) % 4);
 	argv[i] = (char *) kmalloc(len);
@@ -170,7 +202,6 @@ int sys_execv(char *progname, char *args[]){
 	memcpy(argv[i], args[i], strlen(args[i]));
 	}
 
-	argc = i;
 
 	/* Open the file. */
 	result = vfs_open(progname, O_RDONLY, 0, &v);
@@ -195,6 +226,7 @@ int sys_execv(char *progname, char *args[]){
 	result = load_elf(v, &entrypoint);
 	if (result) {
 		/* p_addrspace will go away when curproc is destroyed */
+		proc_setas(old_as);
 		vfs_close(v);
 		return result;
 	}

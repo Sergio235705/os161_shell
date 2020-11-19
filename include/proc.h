@@ -61,6 +61,7 @@ struct vnode;
  * without sleeping.
  */
 #if OPT_SHELL
+#define MAX_PROC 100
 struct fileTableEntry
 { 
   struct openfile* of;
@@ -86,6 +87,7 @@ struct proc {
 #if OPT_SHELL
 	int p_status;                   /* status as obtained by exit() */
     pid_t p_pid;                    /* process pid */
+	pid_t parent_p_pid;
 	struct semaphore *p_sem;
 	struct fileTableEntry fileTable[OPEN_MAX];
 #endif
