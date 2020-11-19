@@ -242,6 +242,19 @@ void proc_destroy(struct proc *proc)
 	KASSERT(proc != NULL);
 	KASSERT(proc != kproc);
 
+	int i;
+
+	for(i = 0; i< OPEN_MAX; i++)
+	{
+		if(proc->fileTable[i] != NULL)
+		{
+			if(proc->fileTable[i]->fd == STDIN_FILENO || proc->fileTable[i]->fd == STDOUT_FILENO || proc->fileTable[i]->fd == STDERR_FILENO)
+			{
+				proc->fileTable[i]->fteCnt--;
+			}
+		}
+	}
+
 	/*
 	 * We don't take p_lock in here because we must have the only
 	 * reference to this structure. (Otherwise it would be
