@@ -37,12 +37,13 @@
 #include <limits.h>
 #include <proc.h>
 
-#if OPT_SHELL
+
 #define SYSTEM_OPEN_MAX (10 * OPEN_MAX)
 
 struct openfile
 {
   struct vnode *vn;
+  off_t offset;
   unsigned int countRef;
 };
 
@@ -51,7 +52,6 @@ struct tableOpenFile
   struct lock *lk;
   struct openfile systemFileTable[SYSTEM_OPEN_MAX];
 };
-#endif
 
 struct trapframe; /* from <machine/trapframe.h> */
 
@@ -85,14 +85,14 @@ int sys_close(int fd , int32_t *retval);
 int sys_write(int fd, userptr_t buf_ptr, size_t siz, int32_t *retval);
 int sys_read(int fd, userptr_t buf_ptr, size_t size, int32_t *retval);
 void sys__exit(int status);
-int sys_waitpid(pid_t pid, userptr_t statusp, int options , int32_t *retval);
+int sys_waitpid(pid_t pid, userptr_t statusp, int options,pid_t* retval);
 pid_t sys_getpid(void);
-pid_t sys_fork(struct trapframe *ctf , int32_t *retval);
-int sys__getcwd(char* buf, size_t buflen , int32_t *retval);
-int sys_chdir(const char* pathname, int32_t *retval);
-int sys_execv(char *progname, char *args[] , int32_t *retval);
-int sys_lseek(int fd ,off_t pos, int whence, int64_t *retval);
-int sys_dup2(int oldfd,int newfd, int32_t *retval);
+pid_t sys_fork(struct trapframe *ctf,pid_t* retval);
+int sys__getcwd(char* buf, size_t buflen);
+int sys_execv(char *progname, char *args[]);
+int sys_lseek(int fd ,off_t offset, int start);
+int sys_dup2(int oldfd,int newfd);
 int sys_remove(userptr_t pathname, int32_t *retval);
+
 #endif
 #endif /* _SYSCALL_H_ */

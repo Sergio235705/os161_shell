@@ -80,13 +80,7 @@ syscall(struct trapframe *tf)
 {
 	int callno;
 	int32_t retval;
-	int64_t retval64;
-	int err = -1;
-
-
-	bool return64 = false;
-	int whence;
-	off_t pos;
+	int err=-1;
 
 	KASSERT(curthread != NULL);
 	KASSERT(curthread->t_curspl == 0);
@@ -142,9 +136,11 @@ syscall(struct trapframe *tf)
                 break;
 
 	case SYS_waitpid:
-	        err = sys_waitpid((pid_t)tf->tf_a0,
+	        retval = sys_waitpid((pid_t)tf->tf_a0,
 				(userptr_t)tf->tf_a1,
-				(int)tf->tf_a2, (pid_t*)&retval);
+				(int)tf->tf_a2);
+                if (retval<0) err = ENOSYS; 
+		else err = 0;
                 break;
 
 	case SYS_getpid:
@@ -166,17 +162,21 @@ syscall(struct trapframe *tf)
                 break;
             
 	case SYS_remove:
-		err = sys_remove((userptr_t)tf->tf_a0, &retval);
-		//err = 0; //be careful here TO DO
-	   	break;
+	      /* just ignore: do nothing */
+	        retval = 0;
+                break;
 	
 	case SYS_fork:
-	        err = sys_fork(tf,(pid_t*)&retval);
+	        err = sys_fork(tf);
+ 		if (retval<0) err = ENOSYS; 
+		else err = 0;
                 break;
 	
 	case SYS_execv:
 	        err = sys_execv((char*)tf->tf_a0,
 				  (char**)tf->tf_a1);
+ 		if (retval<0) err = ENOSYS; 
+		else err = 0;
                 break;
 
 	case SYS___getcwd:
@@ -190,7 +190,7 @@ syscall(struct trapframe *tf)
 		break;
 
 	case SYS_lseek:
-		err = sys_lseek((int)tf->tf_a0, (off_t)tf->tf_a1, (int)tf->tf_a2);
+		err = lseek((int)tf->tf_a0, (off_t)tf->tf_a1, (int)tf->tf_a2);
 
 		break;
 
@@ -216,18 +216,8 @@ syscall(struct trapframe *tf)
 	}
 	else {
 		/* Success. */
-		if(return64)
-		{
-			tf->tf_v0 = (int32_t)((retval64 & 0xFFFFFFFF00000000) >> 32);
-			tf->tf_v1 = (int32_t)(retval64 & 0x00000000FFFFFFFF);
-
-		}
-		else
-		{
-			tf->tf_v0 = retval;
-		}
-
-		tf->tf_a3 = 0; /* signal no error */
+		tf->tf_v0 = retval;
+		tf->tf_a3 = 0;      /* signal no error */
 	}
 
 	/*

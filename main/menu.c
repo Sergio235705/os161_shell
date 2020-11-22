@@ -44,6 +44,7 @@
 #include "opt-sfs.h"
 #include "opt-net.h"
 #include "opt-shell.h"
+#include <vm.h>
 /*
  * In-kernel menu and command dispatcher.
  */
@@ -131,21 +132,16 @@ common_prog(int nargs, char **args)
 			proc /* new process */,
 			cmd_progthread /* thread function */,
 			args /* thread arg */, nargs /* thread arg */);
-	#if OPT_SHELL
-	pid_t pid = proc->p_pid;
-	int exit_code;
-	result = sys_waitpid(pid,(userptr_t)&exit_code,0, &pid_2);
-	if(pid_2 != pid){
-		kprintf("Something goes wrong: pid returned != pid\n");
-		}
-	kprintf("Process returned = %d\n",exit_code);
-	#endif
+	
 	if (result) {
 		kprintf("thread_fork failed: %s\n", strerror(result));
 		proc_destroy(proc);
 		return result;
 	}
-
+	#if OPT_SHELL
+	int exit_code = proc_wait(proc);
+	kprintf("Process returned = %d\n",exit_code);
+	#endif
 	/*
 	 * The new process will be destroyed when the program exits...
 	 * once you write the code for handling that.
@@ -190,7 +186,16 @@ cmd_shell(int nargs, char **args)
 
 	return common_prog(nargs, args);
 }
-
+/* function for memory stats */
+#if OPT_SHELL
+static int
+cmd_stats(int nargs,char** args){
+	(void)args;
+	(void)nargs;
+	vm_stats();
+	return 0;
+}
+#endif
 /*
  * Command for changing directory.
  */
@@ -458,6 +463,9 @@ static const char *opsmenu[] = {
 	"[sync]    Sync filesystems          ",
 	"[panic]   Intentional panic         ",
 	"[q]       Quit and shut down        ",
+	#if OPT_SHELL
+	"[ms]	   Print memory stats		 ",
+	#endif
 	NULL
 };
 
@@ -566,6 +574,9 @@ static struct {
 	{ "q",		cmd_quit },
 	{ "exit",	cmd_quit },
 	{ "halt",	cmd_quit },
+	#if OPT_SHELL
+	{ "ms",		cmd_stats },
+	#endif
 
 	/* stats */
 	{ "kh",         cmd_kheapstats },

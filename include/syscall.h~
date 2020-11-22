@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008
+ * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
  *	The President and Fellows of Harvard College.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,15 +27,56 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _KERN_UNISTD_H_
-#define _KERN_UNISTD_H_
+#ifndef _SYSCALL_H_
+#define _SYSCALL_H_
 
-/* Constants for read/write/etc: special file handles */
-#define STDIN_FILENO  0      /* Standard input */
-#define STDOUT_FILENO 1      /* Standard output */
-#define STDERR_FILENO 2      /* Standard error */
-#define SEEK_SET 0           /* start - file */
-#define SEEK_END 1           /* end - file */
-#define SEEK_CUR 2           /* current punt - file */
 
-#endif /* _KERN_UNISTD_H_ */
+#include <cdefs.h> /* for __DEAD */
+#include "opt-shell.h"
+#include <copyinout.h>
+
+struct trapframe; /* from <machine/trapframe.h> */
+
+/*
+ * The system call dispatcher.
+ */
+
+void syscall(struct trapframe *tf);
+
+/*
+ * Support functions.
+ */
+
+/* Helper for fork(). You write this. */
+void enter_forked_process(struct trapframe *tf);
+
+/* Enter user mode. Does not return. */
+__DEAD void enter_new_process(int argc, userptr_t argv, userptr_t env,
+		       vaddr_t stackptr, vaddr_t entrypoint);
+
+
+/*
+ * Prototypes for IN-KERNEL entry points for system call implementations.
+ */
+
+int sys_reboot(int code);
+int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
+#if OPT_SHELL
+struct openfile;
+void openfileIncrRefCount(struct openfile *of);
+void openfileDecrRefCount(struct openfile *of);
+int sys_open(userptr_t path, int openflags, mode_t mode, int *errp);
+int sys_close(int fd);
+int sys_write(int fd, userptr_t buf_ptr, size_t size);
+int sys_read(int fd, userptr_t buf_ptr, size_t size);
+void sys__exit(int status);
+int sys_waitpid(pid_t pid, userptr_t statusp, int options);
+pid_t sys_getpid(void);
+pid_t sys_fork(struct trapframe *ctf);
+int sys__getcwd(char* buf, size_t buflen);
+int sys_execv(char *progname, char *args[]);
+int sys_lseek(int fd ,off_t offset , int start);
+int sys_dup2(int oldfd,int newfd);
+
+#endif
+#endif /* _SYSCALL_H_ */

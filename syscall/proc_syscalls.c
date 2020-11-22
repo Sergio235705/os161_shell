@@ -25,32 +25,56 @@
 #include <mips/trapframe.h>
 #include <synch.h>
 #include <test.h>
+#include <kern/wait.h>
 #if OPT_SHELL
 
-void sys__exit(int status)
+
+void
+sys__exit(int status)
 {
 	struct proc *p = curproc;
-	p->p_status = status & 0xff; /* just lower 8 bits returned */
+	/*Let's create the error code in a linux fashion:*/
+	p->p_status = _MKWAIT_EXIT(status);
 	proc_remthread(curthread);
 	V(p->p_sem);
 	thread_exit();
 	panic("thread_exit returned\n");
+
 }
 
-int sys_waitpid(pid_t pid, userptr_t statusp, int options, int32_t *retval)
+
+
+
+int
+sys_waitpid(pid_t pid, userptr_t statusp, int options,pid_t* retval)
 {
+	*retval = -1;
+	/*Here we assume that pid can be only positive: no concept of group id*/
+	if (pid <= 0){
+		return ENOSYS;
+	}
+	if(pid >= PID_MAX || pid >= MAX_PROC || pid == curproc->p_pid || pid == curproc->parent_p_pid)
+		return ECHILD;
 	struct proc *p = proc_search_pid(pid);
-	int s;
-	(void)options; /* not handled */
-	if (p == NULL)
-	{
-		*retval = -1;
-		return -1;
+	int s,s1;
+	if(options!=0) //TO DO: Gestire le opzioni
+		if(options!= WNOHANG && options != WUNTRACED && options != (WNOHANG||WUNTRACED) )
+			return EINVAL;
+	if (p==NULL){
+		return ESRCH;
 	}
 	s = proc_wait(p);
-	if (statusp != NULL)
+
+	if (statusp!=NULL)
 	{
-		*(int *)statusp = s;
+	int result = copyout(&s, (userptr_t) statusp, sizeof(int));
+
+	if(result)
+		return result;
+	if(copyin((userptr_t) statusp,&s1, sizeof(int)))
+		kprintf("bruh...2\n");
+
+	//memcpy(ret, &pid, sizeof(int));
 	}
 	*retval = pid;
 	return 0;
@@ -72,8 +96,7 @@ call_enter_forked_process(void *tfv, unsigned long dummy)
 	panic("enter_forked_process returned (should not happen)\n");
 }
 
-pid_t sys_fork(struct trapframe *ctf, int32_t *retval)
-{
+int sys_fork(struct trapframe *ctf,pid_t* retval) {
 	struct trapframe *tf_child;
 	struct proc *newp;
 	int result;
@@ -81,66 +104,94 @@ pid_t sys_fork(struct trapframe *ctf, int32_t *retval)
 	KASSERT(curproc != NULL);
 
 	newp = proc_create_runprogram(curproc->p_name);
-	if (newp == NULL)
-	{
-
-		*retval = ENOMEM;
-		return -1;
+	if (newp == NULL) {
+		return ENOMEM;
 	}
-
 	as_copy(curproc->p_addrspace, &(newp->p_addrspace));
-	if (newp->p_addrspace == NULL)
-	{
-		proc_destroy(newp);
-		*retval = -1;
-		return ENOMEM;
+	if(newp->p_addrspace == NULL){
+		proc_destroy(newp); 
+		return ENOMEM; 
 	}
-
-	proc_file_table_copy(curproc, newp);
-
 	tf_child = kmalloc(sizeof(struct trapframe));
-	if (tf_child == NULL)
-	{
+	if(tf_child == NULL){
 		proc_destroy(newp);
-		*retval = -1;
-		return ENOMEM;
+		return ENOMEM; 
 	}
 	memcpy(tf_child, ctf, sizeof(struct trapframe));
 
 	/* TO BE DONE: linking parent/child, so that child terminated 
-     on parent exit */
-
+		on parent exit */
+	newp->parent_p_pid = curproc->p_pid;
 	result = thread_fork(
-		curthread->t_name, newp,
-		call_enter_forked_process,
-		(void *)tf_child, (unsigned long)0 /*unused*/);
+			curthread->t_name, newp,
+			call_enter_forked_process, 
+			(void *)tf_child, (unsigned long)0/*unused*/);
 
-	if (result)
-	{
+	if (result){
 		proc_destroy(newp);
 		kfree(tf_child);
-		*retval = -1;
 		return ENOMEM;
-	}
+  }
 
+ 
 	*retval = newp->p_pid;
-	return 0;
+  return  0;
 }
 
-int sys_execv(char *progname, char *args[], int32_t *retval)
-{
+
+int sys_execv(char *progname, char *args[]){
 	struct addrspace *as;
 	struct vnode *v;
 	vaddr_t entrypoint, stackptr;
 	int result;
-	int argc = 0;
-	int i = 0, len, j;
-	struct addrspace *old_as;
-	char **argv = (char **)kmalloc(sizeof(args) * sizeof(char *));
-	if (!argv)
+	int argc=0;
+	int i = 0,len,j;
+	struct addrspace * old_as;
+	char* garbage = kmalloc( (ARG_MAX+1) *sizeof(char));
+	char* path_name = kmalloc( (PATH_MAX+1) *sizeof(char));
+	size_t size = 0;
+	int end = 0;
+	result = copyinstr((userptr_t)progname, path_name, PATH_MAX, &size);
+	if(result)
+		return result;	
+	char** argv = (char **) kmalloc(sizeof (args) * sizeof (char *));
+	if (!argv) {
+	   return -1;
+	}
+	/*if (args == NULL)
+		argc = 0;
+	else*/
+	//Riga aggiunta per committare
+	i = 0;
 	{
-		*retval = -1;
-		return -1;
+		result = copyinstr((userptr_t)args, garbage, ARG_MAX, &size);
+		if (result)
+			return result;
+		while (!end)
+		{
+			size = 0;
+			if(args[i] == NULL){
+				break;
+			}
+			result = copyinstr((userptr_t)args[i], garbage, ARG_MAX, &size);
+				if (result)
+					return result;
+			i++;
+			if(size == 0)
+				end = 1;
+
+
+		}
+		argc = i;
+	}
+		
+	// looping through the arguments to copy into the new array.
+	for (i = 0;i < argc; i++) {
+
+	len = strlen(args[i]) + 4 - (strlen(args[i]) % 4);
+	argv[i] = (char *) kmalloc(len);
+	if (!argv[i]) {
+	    panic("Out of memory copying argument\n");
 	}
 	// looping through the arguments to copy into the new array.
 	for (i = 0; args[i] != NULL; i++)
@@ -160,7 +211,6 @@ int sys_execv(char *progname, char *args[], int32_t *retval)
 		memcpy(argv[i], args[i], strlen(args[i]));
 	}
 
-	argc = i;
 
 	/* Open the file. */
 	result = vfs_open(progname, O_RDONLY, 0, &v);
@@ -176,8 +226,7 @@ int sys_execv(char *progname, char *args[], int32_t *retval)
 	if (as == NULL)
 	{
 		vfs_close(v);
-		*retval = ENOMEM;
-		return -1;
+		return ENOMEM;
 	}
 
 	/* Switch to it and activate it. */
@@ -186,13 +235,13 @@ int sys_execv(char *progname, char *args[], int32_t *retval)
 
 	/* Load the executable. */
 	result = load_elf(v, &entrypoint);
-	if (result)
-	{
+	if (result) {
 		/* p_addrspace will go away when curproc is destroyed */
+		proc_setas(old_as);
 		vfs_close(v);
-		*retval = result;
-		return -1;
+		return result;
 	}
+
 	/* Done with the file now. */
 	vfs_close(v);
 
@@ -201,8 +250,7 @@ int sys_execv(char *progname, char *args[], int32_t *retval)
 	if (result)
 	{
 		/* p_addrspace will go away when curproc is destroyed */
-		*retval = result;
-		return -1;
+		return result;
 	}
 	as_destroy(old_as);
 
@@ -211,55 +259,59 @@ int sys_execv(char *progname, char *args[], int32_t *retval)
 	vaddr_t topstack[argc];
 	// Looping through the array to copy the arguments into the stack.
 	// The stack is bottom up, so we start with the last argument of argv
-	for (i = argc - 1; i >= 0; i--)
-	{
-		len = strlen(argv[i]) + 4 - (strlen(argv[i]) % 4); //modified here
-		// Decrement the stack pointer to copy in the arguments.
-		stackptr -= len;
-		// copy the arguments into the stack and free them from argv.
-		result = copyoutstr(argv[i], (userptr_t)stackptr, len, &actual);
-		if (result != 0)
-		{
-			kprintf("copyoutstr failed: %s\n", strerror(result));
-			*retval = result;
-			return -1;
-		}
-		kfree(argv[i]);
-		// save the stack address of the arguments in the original order.
-		topstack[argc - i - 1] = stackptr;
+	for (i = argc - 1; i >= 0; i--) {
+	len = strlen(argv[i]) + 4 - (strlen(argv[i]) % 4); //modified here
+	// Decrement the stack pointer to copy in the arguments.
+	stackptr -= len;
+	// copy the arguments into the stack and free them from argv.
+	result = copyoutstr(argv[i], (userptr_t) stackptr, len, &actual);
+	if(result != 0){
+	    kprintf("copyoutstr failed: %s\n", strerror(result));
+	    return result;
+	}
+	kfree(argv[i]);
+	// save the stack address of the arguments in the original order.
+	topstack[argc - i - 1] = stackptr;
 	}
 	kfree(argv);
-
+	kfree(path_name);
+	kfree(garbage);
 	// decrement the stack pointer and add 4 null bytes of padding.
 	stackptr -= 4;
-	copyoutstr(NULL, (userptr_t)stackptr, 4, &actual);
-	if (result != 0)
-	{
-		kprintf("copyoutstr failed: %s\n", strerror(result));
-		*retval = result;
-		return -1;
+	char nullbytes[4];
+	nullbytes[0] = nullbytes[1] = nullbytes[2] = nullbytes[3] = 0x00;
+	result = copyoutstr(nullbytes, (userptr_t) stackptr, 4, &actual);
+	if(result != 0){
+	    kprintf("copyoutstr failed: %s\n", strerror(result));
+	    return result;
 	}
+
 	// writing the addresses of the arguments in the stack, into the stack.
-	for (i = 0; i < argc; i++)
-	{
-		stackptr -= 4;
-		result = copyout(&topstack[i], (userptr_t)stackptr, sizeof(topstack[i]));
-		if (result != 0)
-		{
-			kprintf("copyout failed: %s\n", strerror(result));
-			*retval = result;
-			return -1;
-		}
+	for (i = 0; i < argc; i++) {
+	stackptr -= 4;
+	result = copyout(&topstack[i], (userptr_t) stackptr, sizeof (topstack[i]));
+	if(result != 0){
+	    kprintf("copyout failed: %s\n", strerror(result));
+	    return result;
+	}
 	}
 
 	/* Warp to user mode. */
-	enter_new_process(argc /*argc*/, (userptr_t)stackptr /*userspace addr of argv*/,
-					  NULL /*userspace addr of environment*/,
-					  stackptr, entrypoint);
+	enter_new_process(argc /*argc*/, (userptr_t) stackptr/*userspace addr of argv*/,
+			  NULL /*userspace addr of environment*/,
+			  stackptr, entrypoint);
 
 	/* enter_new_process does not return. */
 	panic("enter_new_process returned\n");
 	return EINVAL;
 }
 
+
+
+
+
+
+
+
 #endif
+
