@@ -13,7 +13,6 @@
 #include <kern/errno.h>
 #include <lib.h>
 #include <syscall.h>
-#include <proc.h>
 #include <clock.h>
 #include <copyinout.h>
 #include <thread.h>
@@ -81,20 +80,20 @@ sys_waitpid(pid_t pid, userptr_t statusp, int options,pid_t* retval)
 	return 0;
 }
 
-pid_t
-sys_getpid(void)
+pid_t sys_getpid(void)
 {
-  KASSERT(curproc != NULL);
-  return curproc->p_pid;
+	KASSERT(curproc != NULL);
+	return curproc->p_pid;
 }
 
 static void
-call_enter_forked_process(void *tfv, unsigned long dummy) {
-  struct trapframe *tf = (struct trapframe *)tfv;
-  (void)dummy;
-  enter_forked_process(tf); 
- 
-  panic("enter_forked_process returned (should not happen)\n");
+call_enter_forked_process(void *tfv, unsigned long dummy)
+{
+	struct trapframe *tf = (struct trapframe *)tfv;
+	(void)dummy;
+	enter_forked_process(tf);
+
+	panic("enter_forked_process returned (should not happen)\n");
 }
 
 int sys_fork(struct trapframe *ctf,pid_t* retval) {
@@ -194,18 +193,29 @@ int sys_execv(char *progname, char *args[]){
 	if (!argv[i]) {
 	    panic("Out of memory copying argument\n");
 	}
+	// looping through the arguments to copy into the new array.
+	for (i = 0; args[i] != NULL; i++)
+	{
 
-	// Put '\0' in each of the spots.
-	for (j = 0; j < len; j++)
-	    argv[i][j] = '\0';
-	// copy the arguments into argv and free them from args.
-	memcpy(argv[i], args[i], strlen(args[i]));
+		len = strlen(args[i]) + 4 - (strlen(args[i]) % 4);
+		argv[i] = (char *)kmalloc(len);
+		if (!argv[i])
+		{
+			panic("Out of memory copying argument\n");
+		}
+
+		// Put '\0' in each of the spots.
+		for (j = 0; j < len; j++)
+			argv[i][j] = '\0';
+		// copy the arguments into argv and free them from args.
+		memcpy(argv[i], args[i], strlen(args[i]));
 	}
 
 
 	/* Open the file. */
 	result = vfs_open(progname, O_RDONLY, 0, &v);
-	if (result) {
+	if (result)
+	{
 		return result;
 	}
 
@@ -213,7 +223,8 @@ int sys_execv(char *progname, char *args[]){
 	old_as = curproc->p_addrspace;
 	/* Create a new address space. */
 	as = as_create();
-	if (as == NULL) {
+	if (as == NULL)
+	{
 		vfs_close(v);
 		return ENOMEM;
 	}
@@ -236,12 +247,12 @@ int sys_execv(char *progname, char *args[]){
 
 	/* Define the user stack in the address space */
 	result = as_define_stack(as, &stackptr);
-	if (result) {
+	if (result)
+	{
 		/* p_addrspace will go away when curproc is destroyed */
 		return result;
 	}
 	as_destroy(old_as);
-	
 
 	//Copy arguments from the kernel to the users stack.
 	size_t actual;
@@ -284,7 +295,6 @@ int sys_execv(char *progname, char *args[]){
 	    return result;
 	}
 	}
-			
 
 	/* Warp to user mode. */
 	enter_new_process(argc /*argc*/, (userptr_t) stackptr/*userspace addr of argv*/,

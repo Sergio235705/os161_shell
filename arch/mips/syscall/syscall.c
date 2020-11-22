@@ -80,7 +80,13 @@ syscall(struct trapframe *tf)
 {
 	int callno;
 	int32_t retval;
-	int err=-1;
+	int64_t retval64;
+	int err = -1;
+
+
+	bool return64 = false;
+	int whence;
+	off_t pos;
 
 	KASSERT(curthread != NULL);
 	KASSERT(curthread->t_curspl == 0);
@@ -210,8 +216,18 @@ syscall(struct trapframe *tf)
 	}
 	else {
 		/* Success. */
-		tf->tf_v0 = retval;
-		tf->tf_a3 = 0;      /* signal no error */
+		if(return64)
+		{
+			tf->tf_v0 = (int32_t)((retval64 & 0xFFFFFFFF00000000) >> 32);
+			tf->tf_v1 = (int32_t)(retval64 & 0x00000000FFFFFFFF);
+
+		}
+		else
+		{
+			tf->tf_v0 = retval;
+		}
+
+		tf->tf_a3 = 0; /* signal no error */
 	}
 
 	/*
