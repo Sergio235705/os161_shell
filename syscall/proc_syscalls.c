@@ -148,11 +148,11 @@ int sys_execv(char *progname, char *args[]){
 	int argc=0;
 	int i = 0,len,j;
 	struct addrspace * old_as;
-	char garbage[ARG_MAX+1];
-	char path_name[NAME_MAX+1];
+	char* garbage = kmalloc( (ARG_MAX+1) *sizeof(char));
+	char* path_name = kmalloc( (PATH_MAX+1) *sizeof(char));
 	size_t size = 0;
 	int end = 0;
-	result = copyinstr((userptr_t)progname, path_name, NAME_MAX, &size);
+	result = copyinstr((userptr_t)progname, path_name, PATH_MAX, &size);
 	if(result)
 		return result;	
 	char** argv = (char **) kmalloc(sizeof (args) * sizeof (char *));
@@ -263,10 +263,13 @@ int sys_execv(char *progname, char *args[]){
 	topstack[argc - i - 1] = stackptr;
 	}
 	kfree(argv);
-
+	kfree(path_name);
+	kfree(garbage);
 	// decrement the stack pointer and add 4 null bytes of padding.
 	stackptr -= 4;
-	copyoutstr(NULL, (userptr_t) stackptr, 4, &actual);
+	char nullbytes[4];
+	nullbytes[0] = nullbytes[1] = nullbytes[2] = nullbytes[3] = 0x00;
+	result = copyoutstr(nullbytes, (userptr_t) stackptr, 4, &actual);
 	if(result != 0){
 	    kprintf("copyoutstr failed: %s\n", strerror(result));
 	    return result;

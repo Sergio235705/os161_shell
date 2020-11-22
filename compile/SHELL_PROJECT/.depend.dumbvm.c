@@ -11,4 +11,4 @@ dumbvm.o: ../../arch/mips/vm/dumbvm.c ../../include/types.h \
  ../../include/thread.h ../../include/array.h \
  includelinks/machine/thread.h ../../include/setjmp.h \
  includelinks/kern/machine/setjmp.h includelinks/mips/tlb.h \
- ../../include/addrspace.h ../../include/vm.h opt-dumbvm.h opt-shell.h
+ ../../include/addrspace.h ../../include/vm.h opt-shell.h opt-dumbvm.h

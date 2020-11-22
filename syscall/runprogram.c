@@ -144,7 +144,9 @@ runprogram(char *progname,char** args,int argc)
 
 	// decrement the stack pointer and add 4 null bytes of padding.
 	stackptr -= 4;
-	copyoutstr(NULL, (userptr_t) stackptr, 4, &actual);
+	char nullbytes[4];
+	nullbytes[0] = nullbytes[1] = nullbytes[2] = nullbytes[3] = 0x00;
+	result = copyoutstr(nullbytes, (userptr_t) stackptr, 4, &actual);
 	if(result != 0){
 	    kprintf("copyoutstr failed: %s\n", strerror(result));
 	    return result;
