@@ -26,14 +26,66 @@
 
 struct tableOpenFile TabFile;
 
+int sys_chdir(const char* pathname, int32_t *retval)
+{
+  char *path = kmalloc(sizeof(char)*PATH_MAX);
+  size_t len;
+
+  if(pathname == NULL || (int *)pathname == (int *)0x40000000 || (int *)pathname == (int *)0x80000000)
+  {
+    *retval = -1;
+    return EFAULT;
+  }
+
+  copyinstr((userptr_t)pathname, path, PATH_MAX, &len);
+  int result = vfs_chdir(path);
+  if(result)
+  {
+    kfree(path);
+    *retval = -1;
+    return result;
+  }
+  kfree(path);
+  *retval = 0;
+  return 0;
+
+}
+
 int sys__getcwd(char *buf, size_t buflen, int32_t *retval)
 {
   struct iovec iov;
   struct uio ku;
+  int result;
+  size_t size;
 
-  uio_kinit(&iov, &ku, buf, buflen, 0, UIO_READ);
-  *retval = vfs_getcwd(&ku);
-  return *retval;
+  if(buflen <= 0)
+  {
+    *retval = -1;
+    return EINVAL;
+  }
+
+  if(buf == NULL || (int *)buf == (int *)0x40000000 || (int *)buf == (int *)0x80000000)
+  {
+    *retval = -1;
+    return EFAULT;
+  }
+
+  char* name = kmalloc(sizeof(char)*buflen);
+
+  uio_kinit(&iov, &ku, name, buflen, 0, UIO_READ);
+  result = vfs_getcwd(&ku);
+  if(result)
+  {
+    kfree(name);
+    *retval = -1;
+    return result;
+  }
+
+  copyoutstr((const void*)name, (userptr_t)buf, buflen, &size);
+
+  *retval = buflen - ku.uio_resid;
+  kfree(name);
+  return 0;
 }
 
 int sys_open(struct proc *p, userptr_t path, int openflags, mode_t mode, int32_t *retval)
