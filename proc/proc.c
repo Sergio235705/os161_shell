@@ -54,6 +54,7 @@
 
 #if OPT_SHELL
 #include <synch.h>
+#include <kern/unistd.h>
 
 
 extern struct tableOpenFile TabFile;
@@ -242,7 +243,7 @@ void proc_destroy(struct proc *proc)
 
 	KASSERT(proc != NULL);
 	KASSERT(proc != kproc);
-
+#if OPT_SHELL
 	int i;
 
 	for(i = 0; i< OPEN_MAX; i++)
@@ -255,6 +256,7 @@ void proc_destroy(struct proc *proc)
 			}
 		}
 	}
+#endif
 
 	/*
 	 * We don't take p_lock in here because we must have the only

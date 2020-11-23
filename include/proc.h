@@ -68,6 +68,7 @@ struct fileTableEntry
   off_t offset;
   int flags;
   int fd;
+  int fteCnt;
 
 };
 #endif
@@ -89,7 +90,7 @@ struct proc {
     pid_t p_pid;                    /* process pid */
 	pid_t parent_p_pid;
 	struct semaphore *p_sem;
-	struct fileTableEntry fileTable[OPEN_MAX];
+	struct fileTableEntry *fileTable[OPEN_MAX];
 #endif
 
 };

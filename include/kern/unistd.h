@@ -34,8 +34,5 @@
 #define STDIN_FILENO  0      /* Standard input */
 #define STDOUT_FILENO 1      /* Standard output */
 #define STDERR_FILENO 2      /* Standard error */
-#define SEEK_SET 0           /* start - file */
-#define SEEK_END 1           /* end - file */
-#define SEEK_CUR 2           /* current punt - file */
 
 #endif /* _KERN_UNISTD_H_ */
