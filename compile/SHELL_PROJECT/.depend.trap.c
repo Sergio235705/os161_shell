@@ -12,4 +12,5 @@ trap.o: ../../arch/mips/locore/trap.c ../../include/types.h \
  ../../include/current.h includelinks/machine/current.h \
  ../../include/vm.h opt-shell.h ../../include/mainbus.h \
  ../../include/syscall.h ../../include/copyinout.h ../../include/limits.h \
- ../../include/kern/limits.h
+ ../../include/kern/limits.h ../../include/proc.h \
+ /home/pds/os161/os161-base-2.0.2/kern/compile/SHELL_PROJECT/opt-shell.h

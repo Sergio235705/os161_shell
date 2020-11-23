@@ -120,7 +120,6 @@ common_prog(int nargs, char **args)
 {
 	struct proc *proc;
 	int result;
-	pid_t pid_2;
 
 	/* Create a process for the new program to run in. */
 	proc = proc_create_runprogram(args[0] /* name */);

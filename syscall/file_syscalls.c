@@ -1,12 +1,4 @@
-/* * * * * * * * * * * * * * * *
-* Sys Call file for LAB2 PDS
-*
-*
-*
-*
-*
-*
-* * * * * * * * * * * * * * * */
+
 
 #include <types.h>
 #include <kern/stattypes.h>
@@ -28,7 +20,7 @@
 
 #if OPT_SHELL
 #include <kern/stat.h>
-
+#include <kern/seek.h>
 
 /* system open file table */
 
@@ -104,11 +96,13 @@ int sys_open(struct proc *p, userptr_t path, int openflags, mode_t mode, int32_t
   struct vnode *v = NULL;
   struct stat *stats = NULL;
   struct openfile *of = NULL;
-  int result;
+  char* kpath = kmalloc(sizeof(char)*PATH_MAX);
+  size_t len;
 
   if (path == NULL || (int *)path == (int *)0x40000000 || (int *)path == (int *)0x80000000)
   {
     *retval = -1;
+    kfree(kpath);
     lock_release(TabFile.lk);
     return EFAULT;
   }
@@ -116,46 +110,42 @@ int sys_open(struct proc *p, userptr_t path, int openflags, mode_t mode, int32_t
   if (p == NULL)
   {
     p = curproc;
+
+    copyinstr(path, kpath, PATH_MAX, &len);
     if ((openflags & O_ACCMODE) >= 3 || (openflags & 0xFFFFFF80) != 0)
     {
       *retval = -1;
+      kfree(kpath);
       lock_release(TabFile.lk);
       return EINVAL;
     }
+    result = vfs_open((char *)kpath, openflags, mode, &v);
   }
-
-  result = vfs_open((char *)path, openflags, mode, &v);
+  else
+  {
+    result = vfs_open((char *)path, openflags, mode, &v);
+  }
+  
   if (result)
   {
     *retval = -1;
+    kfree(kpath);
     lock_release(TabFile.lk);
-    return -1;
+    return result;
   }
+
   /* search system open file table */
   for (i = 0; i < SYSTEM_OPEN_MAX; i++)
   {
 
-    if (TabFile.systemFileTable[i].vn != NULL && TabFile.systemFileTable[i].vn == v)
+    if (TabFile.systemFileTable[i].vn == v)
     {
       of = &TabFile.systemFileTable[i];
       TabFile.systemFileTable[i].countRef++;
-      if (openflags & O_APPEND)
-      {
-        for (fd = STDERR_FILENO + 1; fd < OPEN_MAX; fd++)
-        {
-          if (curproc->fileTable[fd].of == of)
-          {
-            offset = curproc->fileTable[fd].offset;
-          }
-        }
-      }
-      else
-      {
-        offset = 0;
-      }
       break;
     }
   }
+
   if (of == NULL)
   {
     for (i = 0; i < SYSTEM_OPEN_MAX; i++)
@@ -170,10 +160,21 @@ int sys_open(struct proc *p, userptr_t path, int openflags, mode_t mode, int32_t
     }
   }
 
+  if (openflags & O_APPEND)
+  {
+    VOP_STAT(of->vn, stats);
+    offset = stats->st_size;
+  }
+  else
+  {
+    offset = 0;
+  }
+
   if (of == NULL)
   {
     *retval = -1;
     vfs_close(v);
+    kfree(kpath);
     lock_release(TabFile.lk);
     return ENFILE;
   }
@@ -190,19 +191,20 @@ int sys_open(struct proc *p, userptr_t path, int openflags, mode_t mode, int32_t
         p->fileTable[fd]->fd = fd;
         p->fileTable[fd]->fteCnt = 1;
         *retval = fd;
+        kfree(kpath);
         lock_release(TabFile.lk);
-        return fd;
+        return 0;
       }
     }
     *retval = -1;
     vfs_close(v);
+    kfree(kpath);
     lock_release(TabFile.lk);
     return EMFILE;
   }
 }
 
-int 
-sys_dup2(int oldfd, int newfd)
+int sys_dup2(int oldfd, int newfd, int32_t *retval)
 {
   struct fileTableEntry *fte = NULL;
   int result;
@@ -250,12 +252,12 @@ sys_dup2(int oldfd, int newfd)
   return 0;
 }
 
-int 
-sys_close(int fd)
+int sys_close(int fd, int32_t *retval)
 {
   lock_acquire(TabFile.lk);
 
   struct openfile *of = NULL;
+  struct fileTableEntry *fte = NULL;
   struct vnode *vn;
 
   if (fd < 0 || fd >= OPEN_MAX)
@@ -282,12 +284,6 @@ sys_close(int fd)
     lock_release(TabFile.lk);
     return EBADF;
   }
-
-  /*if (fte->fd == STDIN_FILENO || fte->fd == STDOUT_FILENO || fte->fd == STDERR_FILENO)
-  {
-    lock_release(TabFile.lk);
-    return 0;
-  }*/
 
   fte->fteCnt--;
   if (fte->fteCnt == 0)
@@ -453,6 +449,7 @@ int sys_write(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
   if (result)
   {
     *retval = -1;
+    kfree(kbuf);
     lock_release(TabFile.lk);
     return result;
   }
@@ -464,7 +461,7 @@ int sys_write(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
   return 0;
 }
 
-int sys_read(int fd, userptr_t buf_ptr, size_t size)
+int sys_read(int fd, userptr_t buf_ptr, size_t size, int32_t *retval)
 {
 
   lock_acquire(TabFile.lk);
@@ -527,6 +524,7 @@ int sys_read(int fd, userptr_t buf_ptr, size_t size)
   if (result)
   {
     *retval = -1;
+    kfree(kbuf);
     lock_release(TabFile.lk);
     return result;
   }
@@ -541,19 +539,21 @@ int sys_read(int fd, userptr_t buf_ptr, size_t size)
 
 int sys_remove(userptr_t pathname, int32_t *retval)
 {
-	char name[NAME_MAX+1];
-	size_t len;
+  char name[NAME_MAX + 1];
+  size_t len;
   //From user ptr to kernel space
-	if (copyinstr(pathname, name, NAME_MAX, &len) != 0) {
-		*retval = -1; //TO DO: error managment
-		return 1;
-	}
+  if (copyinstr(pathname, name, NAME_MAX, &len) != 0)
+  {
+    *retval = -1; //TO DO: error managment
+    return 1;
+  }
 
-	*retval = vfs_remove(name);
-	if (*retval < 0) {
-		*retval = -1;
-		return 1; //TO DO: error managment
-	}
-	return 0;
+  *retval = vfs_remove(name);
+  if (*retval < 0)
+  {
+    *retval = -1;
+    return 1; //TO DO: error managment
+  }
+  return 0;
 }
 #endif

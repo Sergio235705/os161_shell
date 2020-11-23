@@ -9,5 +9,7 @@ syscall.o: ../../arch/mips/syscall/syscall.c ../../include/types.h \
  includelinks/kern/machine/setjmp.h ../../include/current.h \
  includelinks/machine/current.h ../../include/syscall.h opt-shell.h \
  ../../include/copyinout.h ../../include/limits.h \
- ../../include/kern/limits.h ../../include/addrspace.h ../../include/vm.h \
- includelinks/machine/vm.h opt-dumbvm.h
+ ../../include/kern/limits.h ../../include/proc.h \
+ /home/pds/os161/os161-base-2.0.2/kern/compile/SHELL_PROJECT/opt-shell.h \
+ ../../include/addrspace.h ../../include/vm.h includelinks/machine/vm.h \
+ opt-dumbvm.h

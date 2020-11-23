@@ -120,20 +120,15 @@ syscall(struct trapframe *tf)
 #if OPT_SHELL
 
 	case SYS_write:
-	        retval = sys_write((int)tf->tf_a0,
+	        err = sys_write((int)tf->tf_a0,
 				(userptr_t)tf->tf_a1,
-				(size_t)tf->tf_a2);
-		/* error: function not implemented */
-                if (retval<0) err = ENOSYS; 
-		else err = 0;
+				(size_t)tf->tf_a2, &retval);
                 break;
 
 	case SYS_read:
-	        retval = sys_read((int)tf->tf_a0,
+	        err = sys_read((int)tf->tf_a0,
 				(userptr_t)tf->tf_a1,
-				(size_t)tf->tf_a2);
-                if (retval<0) err = ENOSYS; 
-		else err = 0;
+				(size_t)tf->tf_a2, &retval);
                 break;
 
 	case SYS__exit:
@@ -154,20 +149,17 @@ syscall(struct trapframe *tf)
                 break;
 
 	case SYS_open:
-	        retval = sys_open((userptr_t)tf->tf_a0,
+	        err = sys_open(NULL, (userptr_t)tf->tf_a0,
 				  (int)tf->tf_a1,
-				  (mode_t)tf->tf_a2, &err);
-		if (retval<0) err = ENOENT; else err = 0;
+				  (mode_t)tf->tf_a2, &retval);
                 break;
 
 	case SYS_close:
-	        retval = sys_close((int)tf->tf_a0);
-		if (retval<0) err = ENOENT; else err = 0;
+	        err = sys_close((int)tf->tf_a0, &retval);
                 break;
             
 	case SYS_remove:
 		err = sys_remove((userptr_t)tf->tf_a0, &retval);
-		//err = 0; //be careful here TO DO
 	   	break;
 	
 	case SYS_fork:
@@ -180,18 +172,30 @@ syscall(struct trapframe *tf)
                 break;
 
 	case SYS___getcwd:
-		err = sys__getcwd((char*)tf->tf_a0, (size_t)tf->tf_a1);
+		err = sys__getcwd((char*)tf->tf_a0, (size_t)tf->tf_a1, &retval);
 		
 		break;
 
-	case SYS_dup2:
-		err = sys_dup2((int)tf->tf_a0, (int)tf->tf_a1);
+	case SYS_chdir:
+		err = sys_chdir((const char*)tf->tf_a0, &retval);
+		break;
 
+	case SYS_dup2:
+		err = sys_dup2((int)tf->tf_a0, (int)tf->tf_a1, &retval);
 		break;
 
 	case SYS_lseek:
-		err = sys_lseek((int)tf->tf_a0, (off_t)tf->tf_a1, (int)tf->tf_a2);
+		err = copyin((userptr_t)(tf->tf_sp+16), &whence, sizeof(int));
+		if(err)
+		{
+			retval = -1;
+			break;
+		}
 
+		pos = ((((int64_t)tf->tf_a2) << 32) | tf->tf_a3);
+
+		err = sys_lseek((int)tf->tf_a0, pos, whence, &retval64);
+		return64 = true;
 		break;
 
 	
